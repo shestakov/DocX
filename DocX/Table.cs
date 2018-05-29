@@ -1,12 +1,12 @@
 ﻿using System;
 using System.Collections.Generic;
+using System.Collections.ObjectModel;
 using System.Linq;
 using System.Xml.Linq;
 using System.IO.Packaging;
 using System.IO;
 using System.Drawing;
 using System.Globalization;
-using System.Collections.ObjectModel;
 
 namespace Novacode
 {
@@ -35,7 +35,9 @@ namespace Novacode
             // Foreach each Cell between startIndex and endIndex inclusive.
             foreach (Row row in Rows.Where((z, i) => i > startRow && i <= endRow))
             {
-                Cell c = row.Cells[columnIndex];
+	            var actualColumnIndex = GetActualColumnIndex(columnIndex, row);
+
+	            Cell c = row.Cells[actualColumnIndex];
                 XElement tcPr = c.Xml.Element(XName.Get("tcPr", DocX.w.NamespaceName));
                 if (tcPr == null)
                 {
@@ -55,15 +57,17 @@ namespace Novacode
              * Get the tcPr (table cell properties) element for the first cell in this merge,
             * null will be returned if no such element exists.
              */
+	        var startRowColumnIndex = GetActualColumnIndex(columnIndex, Rows[startRow]);
+
             XElement start_tcPr;
-            if (columnIndex > Rows[startRow].Cells.Count)
+            if (startRowColumnIndex > Rows[startRow].Cells.Count)
                 start_tcPr = Rows[startRow].Cells[Rows[startRow].Cells.Count - 1].Xml.Element(XName.Get("tcPr", DocX.w.NamespaceName));
             else
-                start_tcPr = Rows[startRow].Cells[columnIndex].Xml.Element(XName.Get("tcPr", DocX.w.NamespaceName));
+                start_tcPr = Rows[startRow].Cells[startRowColumnIndex].Xml.Element(XName.Get("tcPr", DocX.w.NamespaceName));
             if (start_tcPr == null)
             {
-                Rows[startRow].Cells[columnIndex].Xml.SetElementValue(XName.Get("tcPr", DocX.w.NamespaceName), string.Empty);
-                start_tcPr = Rows[startRow].Cells[columnIndex].Xml.Element(XName.Get("tcPr", DocX.w.NamespaceName));
+                Rows[startRow].Cells[startRowColumnIndex].Xml.SetElementValue(XName.Get("tcPr", DocX.w.NamespaceName), string.Empty);
+                start_tcPr = Rows[startRow].Cells[startRowColumnIndex].Xml.Element(XName.Get("tcPr", DocX.w.NamespaceName));
             }
 
             /* 
@@ -80,7 +84,21 @@ namespace Novacode
             start_vMerge.SetAttributeValue(XName.Get("val", DocX.w.NamespaceName), "restart");
         }
 
-        /// <summary>
+	    private static int GetActualColumnIndex(int columnIndex, Row row)
+	    {
+		    var actualColumnIndex = columnIndex;
+		    for (var i = 0; i < actualColumnIndex; i++)
+		    {
+			    var gridSpan = row.Cells[i].GridSpan;
+			    if (gridSpan > 0)
+			    {
+				    actualColumnIndex -= (gridSpan - 1);
+			    }
+		    }
+		    return actualColumnIndex;
+	    }
+
+	    /// <summary>
         /// Returns a list of all Paragraphs inside this container.
         /// </summary>
         /// 
@@ -365,7 +383,7 @@ namespace Novacode
                 foreach (var col in cols)
                 {
                     string value = col.GetAttribute(XName.Get("w", DocX.w.NamespaceName));
-                    widths.Add(Convert.ToDouble(value));
+                    widths.Add(double.Parse(value, CultureInfo.InvariantCulture));
                 }
                 return widths;
             }
@@ -689,7 +707,7 @@ namespace Novacode
                                 foreach (Double w in ColumnWidths)
                                     i += w;
 
-                                tmp.SetAttributeValue(XName.Get("w", DocX.w.NamespaceName), i.ToString());
+                                tmp.SetAttributeValue(XName.Get("w", DocX.w.NamespaceName), i.ToString(CultureInfo.InvariantCulture));
 
 
                                 break;
@@ -711,7 +729,7 @@ namespace Novacode
                                 foreach (Double w in ColumnWidths)
                                     i += w;
 
-                                tmp.SetAttributeValue(XName.Get("w", DocX.w.NamespaceName), i.ToString());
+                                tmp.SetAttributeValue(XName.Get("w", DocX.w.NamespaceName), i.ToString(CultureInfo.InvariantCulture));
                                 break;
                             }
 
@@ -2372,1508 +2390,1507 @@ namespace Novacode
 
     }
 
-    /// <summary>
-    /// Represents a single row in a Table.
-    /// </summary>
-    public class Row : Container
-    {
-        /// <summary>
-        /// Calculates columns count in the row, taking spanned cells into account
-        /// </summary>
-        public Int32 ColumnCount
-        {
-            get
-            {
-                int gridSpanSum = 0;
+	/// <summary>
+	/// Represents a single row in a Table.
+	/// </summary>
+	public class Row : Container
+	{
+		/// <summary>
+		/// Calculates columns count in the row, taking spanned cells into account
+		/// </summary>
+		public Int32 ColumnCount
+		{
+			get
+			{
+				int gridSpanSum = 0;
 
-                gridSpanSum += gridAfter;
+				gridSpanSum += gridAfter;
 
-                // Foreach each Cell between startIndex and endIndex inclusive.
-                foreach (Cell c in Cells)
-                {
-                    if (c.GridSpan != 0)
-                    {
-                        gridSpanSum += c.GridSpan - 1;
-                    }
-                }
+				// Foreach each Cell between startIndex and endIndex inclusive.
+				foreach (Cell c in Cells)
+				{
+					if (c.GridSpan != 0)
+					{
+						gridSpanSum += c.GridSpan - 1;
+					}
+				}
 
-                // return cells count + count of spanned cells
-                return Cells.Count + gridSpanSum;
-            }
-        }
+				// return cells count + count of spanned cells
+				return Cells.Count + gridSpanSum;
+			}
+		}
 
-        /// <summary>
-        /// Returns the GridAfter of a row ie. The amount of cells that are deleted
-        /// </summary>
-        public int gridAfter
-        {
-            get
-            {
-                var gridAfterValue = 0;
-                var trPr = Xml.Element(XName.Get("trPr", DocX.w.NamespaceName));
-                if (trPr != null)
-                {
-                    var gridAfter = trPr.Element(XName.Get("gridAfter", DocX.w.NamespaceName));
-                    var val = gridAfter?.Attribute(XName.Get("val", DocX.w.NamespaceName));
-                    if (val != null)
-                    {
-                        gridAfterValue += int.Parse(val.Value);
-                    }
-                }
-                return gridAfterValue;
-            }
-        }
+		/// <summary>
+		/// Returns the GridAfter of a row ie. The amount of cells that are deleted
+		/// </summary>
+		public int gridAfter
+		{
+			get
+			{
+				var gridAfterValue = 0;
+				var trPr = Xml.Element(XName.Get("trPr", DocX.w.NamespaceName));
+				if (trPr != null)
+				{
+					var gridAfter = trPr.Element(XName.Get("gridAfter", DocX.w.NamespaceName));
+					var val = gridAfter?.Attribute(XName.Get("val", DocX.w.NamespaceName));
+					if (val != null)
+					{
+						gridAfterValue += int.Parse(val.Value);
+					}
+				}
+				return gridAfterValue;
+			}
+		}
 
-        /// <summary>
-        /// A list of Cells in this Row.
-        /// </summary>
-        public List<Cell> Cells
-        {
-            get
-            {
-                List<Cell> cells =
-                (
-                    from c in Xml.Elements(XName.Get("tc", DocX.w.NamespaceName))
-                    select new Cell(this, Document, c)
-                ).ToList();
+		/// <summary>
+		/// A list of Cells in this Row.
+		/// </summary>
+		public List<Cell> Cells
+		{
+			get
+			{
+				List<Cell> cells =
+				(
+					from c in Xml.Elements(XName.Get("tc", DocX.w.NamespaceName))
+					select new Cell(this, Document, c)
+				).ToList();
 
-                return cells;
-            }
-        }
+				return cells;
+			}
+		}
 
-        public void Remove()
-        {
-            XElement table = Xml.Parent;
+		public void Remove()
+		{
+			XElement table = Xml.Parent;
 
-            Xml.Remove();
-            if (!table.Elements(XName.Get("tr", DocX.w.NamespaceName)).Any())
-                table.Remove();
-        }
+			Xml.Remove();
+			if (!table.Elements(XName.Get("tr", DocX.w.NamespaceName)).Any())
+				table.Remove();
+		}
 
-        public override ReadOnlyCollection<Paragraph> Paragraphs
-        {
-            get
-            {
-                List<Paragraph> paragraphs =
-                (
-                    from p in Xml.Descendants(DocX.w + "p")
-                    select new Paragraph(Document, p, 0)
-                ).ToList();
+		public override ReadOnlyCollection<Paragraph> Paragraphs
+		{
+			get
+			{
+				List<Paragraph> paragraphs =
+				(
+					from p in Xml.Descendants(DocX.w + "p")
+					select new Paragraph(Document, p, 0)
+				).ToList();
 
-                foreach (Paragraph p in paragraphs)
-                    p.PackagePart = table.mainPart;
+				foreach (Paragraph p in paragraphs)
+					p.PackagePart = table.mainPart;
 
-                return paragraphs.AsReadOnly();
-            }
-        }
+				return paragraphs.AsReadOnly();
+			}
+		}
 
-        internal Table table;
-        internal Row(Table table, DocX document, XElement xml)
-            : base(document, xml)
-        {
-            this.table = table;
-            this.mainPart = table.mainPart;
-        }
+		internal Table table;
+		internal Row(Table table, DocX document, XElement xml)
+			: base(document, xml)
+		{
+			this.table = table;
+			this.mainPart = table.mainPart;
+		}
 
-        /// <summary>
-        /// The property name to set when specifiying an exact height
-        /// </summary>
-        /// <created>Nick Kusters</created>
-        const string _hRule_Exact = "exact";
-        /// <summary>
-        /// The property name to set when specifying a minimum height
-        /// </summary>
-        /// <created>Nick Kusters</created>
-        const string _hRule_AtLeast = "atLeast";
-        /// <summary>
-        /// Height in pixels. // Added by Joel, refactored by Cathal.
-        /// </summary>
-        public double Height
-        {
-            get
-            {
-                // Get the trPr (table row properties) element for this Row,
-                // null will be return if no such element exists.
-                XElement trPr = Xml.Element(XName.Get("trPr", DocX.w.NamespaceName));
+		/// <summary>
+		/// The property name to set when specifiying an exact height
+		/// </summary>
+		/// <created>Nick Kusters</created>
+		const string _hRule_Exact = "exact";
+		/// <summary>
+		/// The property name to set when specifying a minimum height
+		/// </summary>
+		/// <created>Nick Kusters</created>
+		const string _hRule_AtLeast = "atLeast";
+		/// <summary>
+		/// Height in pixels. // Added by Joel, refactored by Cathal.
+		/// </summary>
+		public double Height
+		{
+			get
+			{
+				// Get the trPr (table row properties) element for this Row,
+				// null will be return if no such element exists.
+				XElement trPr = Xml.Element(XName.Get("trPr", DocX.w.NamespaceName));
 
-                // If trPr is null, this row contains no height information.
-                // Get the trHeight element for this Row,
-                // null will be return if no such element exists.
-                XElement trHeight = trPr?.Element(XName.Get("trHeight", DocX.w.NamespaceName));
+				// If trPr is null, this row contains no height information.
+				// Get the trHeight element for this Row,
+				// null will be return if no such element exists.
+				XElement trHeight = trPr?.Element(XName.Get("trHeight", DocX.w.NamespaceName));
 
-                // If trHeight is null, this row contains no height information.
-                // Get the val attribute for this trHeight element.
-                XAttribute val = trHeight?.Attribute(XName.Get("val", DocX.w.NamespaceName));
+				// If trHeight is null, this row contains no height information.
+				// Get the val attribute for this trHeight element.
+				XAttribute val = trHeight?.Attribute(XName.Get("val", DocX.w.NamespaceName));
 
-                // If w is null, this cell contains no width information.
-                if (val == null)
-                    return double.NaN;
+				// If w is null, this cell contains no width information.
+				if (val == null)
+					return double.NaN;
 
-                // If val is not a double, something is wrong with this attributes value, so remove it and return double.NaN;
-                double heightInWordUnits;
-                if (!double.TryParse(val.Value, out heightInWordUnits))
-                {
-                    val.Remove();
-                    return double.NaN;
-                }
+				// If val is not a double, something is wrong with this attributes value, so remove it and return double.NaN;
+				double heightInWordUnits;
+				if (!double.TryParse(val.Value, out heightInWordUnits))
+				{
+					val.Remove();
+					return double.NaN;
+				}
 
-                // 15 "word units" in one pixel
-                return (heightInWordUnits / 15);
-            }
-            set
-            {
-                SetHeight(value, true);
-            }
-        }
-        /// <summary>
-        /// Helper method to set either the exact height or the min-height
-        /// </summary>
-        /// <param name="height">The height value to set (in pixels)</param>
-        /// <param name="exact">
-        /// If true, the height will be forced. 
-        /// If false, it will be treated as a minimum height, auto growing past it if need be.
-        /// </param>
-        /// <created>Nick Kusters</created>
-        void SetHeight(double height, bool exact)
-        {
-            /*
+				// 15 "word units" in one pixel
+				return (heightInWordUnits / 15);
+			}
+			set
+			{
+				SetHeight(value, true);
+			}
+		}
+		/// <summary>
+		/// Helper method to set either the exact height or the min-height
+		/// </summary>
+		/// <param name="height">The height value to set (in pixels)</param>
+		/// <param name="exact">
+		/// If true, the height will be forced. 
+		/// If false, it will be treated as a minimum height, auto growing past it if need be.
+		/// </param>
+		/// <created>Nick Kusters</created>
+		void SetHeight(double height, bool exact)
+		{
+			/*
              * Get the trPr (table row properties) element for this Row,
              * null will be return if no such element exists.
              */
-            XElement trPr = Xml.Element(XName.Get("trPr", DocX.w.NamespaceName));
-            if (trPr == null)
-            {
-                Xml.SetElementValue(XName.Get("trPr", DocX.w.NamespaceName), string.Empty);
-                trPr = Xml.Element(XName.Get("trPr", DocX.w.NamespaceName));
-            }
+			XElement trPr = Xml.Element(XName.Get("trPr", DocX.w.NamespaceName));
+			if (trPr == null)
+			{
+				Xml.SetElementValue(XName.Get("trPr", DocX.w.NamespaceName), string.Empty);
+				trPr = Xml.Element(XName.Get("trPr", DocX.w.NamespaceName));
+			}
 
-            /*
+			/*
              * Get the trHeight element for this Row,
              * null will be return if no such element exists.
              */
-            XElement trHeight = trPr.Element(XName.Get("trHeight", DocX.w.NamespaceName));
-            if (trHeight == null)
-            {
-                trPr.SetElementValue(XName.Get("trHeight", DocX.w.NamespaceName), string.Empty);
-                trHeight = trPr.Element(XName.Get("trHeight", DocX.w.NamespaceName));
-            }
+			XElement trHeight = trPr.Element(XName.Get("trHeight", DocX.w.NamespaceName));
+			if (trHeight == null)
+			{
+				trPr.SetElementValue(XName.Get("trHeight", DocX.w.NamespaceName), string.Empty);
+				trHeight = trPr.Element(XName.Get("trHeight", DocX.w.NamespaceName));
+			}
 
-            // The hRule attribute needs to be set to exact.
-            trHeight.SetAttributeValue(XName.Get("hRule", DocX.w.NamespaceName), exact ? _hRule_Exact : _hRule_AtLeast);
+			// The hRule attribute needs to be set to exact.
+			trHeight.SetAttributeValue(XName.Get("hRule", DocX.w.NamespaceName), exact ? _hRule_Exact : _hRule_AtLeast);
 
-            // 15 "word units" is equal to one pixel. 
-            trHeight.SetAttributeValue(XName.Get("val", DocX.w.NamespaceName), (height * 15).ToString());
-        }
-        /// <summary>
-        /// Min-Height in pixels. // Added by Nick Kusters.
-        /// </summary>
-        /// <remarks>
-        /// Value will be treated as a minimum height, auto growing past it if need be.
-        /// </remarks>
-        /// <created>Nick Kusters</created>
-        public double MinHeight
-        {
-            get
-            {
-                // Just return the value from the normal height property since it doesn't care if you've set an exact or minimum height.
-                return Height;
-            }
-            set
-            {
-                SetHeight(value, false);
-            }
-        }
+			// 15 "word units" is equal to one pixel. 
+			trHeight.SetAttributeValue(XName.Get("val", DocX.w.NamespaceName), (height * 15).ToString(CultureInfo.InvariantCulture));
+		}
+		/// <summary>
+		/// Min-Height in pixels. // Added by Nick Kusters.
+		/// </summary>
+		/// <remarks>
+		/// Value will be treated as a minimum height, auto growing past it if need be.
+		/// </remarks>
+		/// <created>Nick Kusters</created>
+		public double MinHeight
+		{
+			get
+			{
+				// Just return the value from the normal height property since it doesn't care if you've set an exact or minimum height.
+				return Height;
+			}
+			set
+			{
+				SetHeight(value, false);
+			}
+		}
 
 
-        /// <summary>
+		/// <summary>
 		/// Set to true to make this row the table header row that will be repeated on each page
 		/// </summary>
 		public bool TableHeader
-        {
-            get
-            {
-                XElement trPr = Xml.Element(XName.Get("trPr", DocX.w.NamespaceName));
-                if (trPr == null)
-                    return false;
-                XElement tblHeader = trPr.Element(XName.Get("tblHeader", DocX.w.NamespaceName));
-                return tblHeader != null;
-            }
-            set
-            {
-                XElement trPr = Xml.Element(XName.Get("trPr", DocX.w.NamespaceName));
-                if (trPr == null)
-                {
-                    Xml.SetElementValue(XName.Get("trPr", DocX.w.NamespaceName), string.Empty);
-                    trPr = Xml.Element(XName.Get("trPr", DocX.w.NamespaceName));
-                }
-                XElement tblHeader = trPr.Element(XName.Get("tblHeader", DocX.w.NamespaceName));
-                if (tblHeader == null && value)
-                {
-                    trPr.SetElementValue(XName.Get("tblHeader", DocX.w.NamespaceName), string.Empty);
-                }
-                if (tblHeader != null && !value)
-                {
-                    tblHeader.Remove();
-                }
-            }
-        }
+		{
+			get
+			{
+				XElement trPr = Xml.Element(XName.Get("trPr", DocX.w.NamespaceName));
+				if (trPr == null)
+					return false;
+				XElement tblHeader = trPr.Element(XName.Get("tblHeader", DocX.w.NamespaceName));
+				return tblHeader != null;
+			}
+			set
+			{
+				XElement trPr = Xml.Element(XName.Get("trPr", DocX.w.NamespaceName));
+				if (trPr == null)
+				{
+					Xml.SetElementValue(XName.Get("trPr", DocX.w.NamespaceName), string.Empty);
+					trPr = Xml.Element(XName.Get("trPr", DocX.w.NamespaceName));
+				}
+				XElement tblHeader = trPr.Element(XName.Get("tblHeader", DocX.w.NamespaceName));
+				if (tblHeader == null && value)
+				{
+					trPr.SetElementValue(XName.Get("tblHeader", DocX.w.NamespaceName), string.Empty);
+				}
+				if (tblHeader != null && !value)
+				{
+					tblHeader.Remove();
+				}
+			}
+		}
 
 
-        /// <summary>
-        /// Allow row to break across pages. 
-        /// The default value is true: Word will break the contents of the row across pages. 
-        /// If set to false, the contents of the row will not be split across pages, the entire row will be moved to the next page instead.
-        /// </summary>
-        public bool BreakAcrossPages
-        {
-            get
-            {
-                XElement trPr = Xml.Element(XName.Get("trPr", DocX.w.NamespaceName));
+		/// <summary>
+		/// Allow row to break across pages. 
+		/// The default value is true: Word will break the contents of the row across pages. 
+		/// If set to false, the contents of the row will not be split across pages, the entire row will be moved to the next page instead.
+		/// </summary>
+		public bool BreakAcrossPages
+		{
+			get
+			{
+				XElement trPr = Xml.Element(XName.Get("trPr", DocX.w.NamespaceName));
 
-                XElement trCantSplit = trPr?.Element(XName.Get("cantSplit", DocX.w.NamespaceName));
+				XElement trCantSplit = trPr?.Element(XName.Get("cantSplit", DocX.w.NamespaceName));
 
-                return trCantSplit == null;
-            }
+				return trCantSplit == null;
+			}
 
-            set
-            {
-                if (value == false)
-                {
-                    XElement trPr = Xml.Element(XName.Get("trPr", DocX.w.NamespaceName));
-                    if (trPr == null)
-                    {
-                        Xml.SetElementValue(XName.Get("trPr", DocX.w.NamespaceName), string.Empty);
-                        trPr = Xml.Element(XName.Get("trPr", DocX.w.NamespaceName));
-                    }
+			set
+			{
+				if (value == false)
+				{
+					XElement trPr = Xml.Element(XName.Get("trPr", DocX.w.NamespaceName));
+					if (trPr == null)
+					{
+						Xml.SetElementValue(XName.Get("trPr", DocX.w.NamespaceName), string.Empty);
+						trPr = Xml.Element(XName.Get("trPr", DocX.w.NamespaceName));
+					}
 
-                    XElement trCantSplit = trPr.Element(XName.Get("cantSplit", DocX.w.NamespaceName));
-                    if (trCantSplit == null)
-                        trPr.SetElementValue(XName.Get("cantSplit", DocX.w.NamespaceName), string.Empty);
-                }
-                else
-                {
-                    XElement trPr = Xml.Element(XName.Get("trPr", DocX.w.NamespaceName));
-                    XElement trCantSplit = trPr?.Element(XName.Get("cantSplit", DocX.w.NamespaceName));
-                    trCantSplit?.Remove();
-                }
-            }
-        }
+					XElement trCantSplit = trPr.Element(XName.Get("cantSplit", DocX.w.NamespaceName));
+					if (trCantSplit == null)
+						trPr.SetElementValue(XName.Get("cantSplit", DocX.w.NamespaceName), string.Empty);
+				}
+				else
+				{
+					XElement trPr = Xml.Element(XName.Get("trPr", DocX.w.NamespaceName));
+					XElement trCantSplit = trPr?.Element(XName.Get("cantSplit", DocX.w.NamespaceName));
+					trCantSplit?.Remove();
+				}
+			}
+		}
 
-        /// <summary>
-        /// Merge cells starting with startIndex and ending with endIndex.
-        /// </summary>
-        public void MergeCells(int startIndex, int endIndex)
-        {
-            // Check for valid start and end indexes.
-            if (startIndex < 0 || endIndex <= startIndex || endIndex > Cells.Count + 1)
-                throw new IndexOutOfRangeException();
+		/// <summary>
+		/// Merge cells starting with startIndex and ending with endIndex.
+		/// </summary>
+		public void MergeCells(int startIndex, int endIndex)
+		{
+			// Check for valid start and end indexes.
+			if (startIndex < 0 || endIndex <= startIndex || endIndex > Cells.Count + 1)
+				throw new IndexOutOfRangeException();
 
-            // The sum of all merged gridSpans.
-            int gridSpanSum = 0;
+			// The sum of all merged gridSpans.
+			int gridSpanSum = 0;
 
-            // Foreach each Cell between startIndex and endIndex inclusive.
-            foreach (Cell c in Cells.Where((z, i) => i > startIndex && i <= endIndex))
-            {
-                XElement tcPr = c.Xml.Element(XName.Get("tcPr", DocX.w.NamespaceName));
-                XElement gridSpan = tcPr?.Element(XName.Get("gridSpan", DocX.w.NamespaceName));
-                if (gridSpan != null)
-                {
-                    XAttribute val = gridSpan.Attribute(XName.Get("val", DocX.w.NamespaceName));
+			// Foreach each Cell between startIndex and endIndex inclusive.
+			foreach (Cell c in Cells.Where((z, i) => i > startIndex && i <= endIndex))
+			{
+				XElement tcPr = c.Xml.Element(XName.Get("tcPr", DocX.w.NamespaceName));
+				XElement gridSpan = tcPr?.Element(XName.Get("gridSpan", DocX.w.NamespaceName));
+				if (gridSpan != null)
+				{
+					XAttribute val = gridSpan.Attribute(XName.Get("val", DocX.w.NamespaceName));
 
-                    int value;
-                    if (val != null && int.TryParse(val.Value, out value))
-                            gridSpanSum += value - 1;
-                }
+					int value;
+					if (val != null && int.TryParse(val.Value, out value))
+						gridSpanSum += value - 1;
+				}
 
-                // Add this cells Pragraph to the merge start Cell.
-                Cells[startIndex].Xml.Add(c.Xml.Elements(XName.Get("p", DocX.w.NamespaceName)));
+				// Add this cells Pragraph to the merge start Cell.
+				Cells[startIndex].Xml.Add(c.Xml.Elements(XName.Get("p", DocX.w.NamespaceName)));
 
-                // Remove this Cell.
-                c.Xml.Remove();
-            }
+				// Remove this Cell.
+				c.Xml.Remove();
+			}
 
-            /* 
+			/* 
              * Get the tcPr (table cell properties) element for the first cell in this merge,
              * null will be returned if no such element exists.
              */
-            XElement start_tcPr = Cells[startIndex].Xml.Element(XName.Get("tcPr", DocX.w.NamespaceName));
-            if (start_tcPr == null)
-            {
-                Cells[startIndex].Xml.SetElementValue(XName.Get("tcPr", DocX.w.NamespaceName), string.Empty);
-                start_tcPr = Cells[startIndex].Xml.Element(XName.Get("tcPr", DocX.w.NamespaceName));
-            }
+			XElement start_tcPr = Cells[startIndex].Xml.Element(XName.Get("tcPr", DocX.w.NamespaceName));
+			if (start_tcPr == null)
+			{
+				Cells[startIndex].Xml.SetElementValue(XName.Get("tcPr", DocX.w.NamespaceName), string.Empty);
+				start_tcPr = Cells[startIndex].Xml.Element(XName.Get("tcPr", DocX.w.NamespaceName));
+			}
 
-            /* 
+			/* 
              * Get the gridSpan element of this row,
              * null will be returned if no such element exists.
              */
-            XElement start_gridSpan = start_tcPr.Element(XName.Get("gridSpan", DocX.w.NamespaceName));
-            if (start_gridSpan == null)
-            {
-                start_tcPr.SetElementValue(XName.Get("gridSpan", DocX.w.NamespaceName), string.Empty);
-                start_gridSpan = start_tcPr.Element(XName.Get("gridSpan", DocX.w.NamespaceName));
-            }
+			XElement start_gridSpan = start_tcPr.Element(XName.Get("gridSpan", DocX.w.NamespaceName));
+			if (start_gridSpan == null)
+			{
+				start_tcPr.SetElementValue(XName.Get("gridSpan", DocX.w.NamespaceName), string.Empty);
+				start_gridSpan = start_tcPr.Element(XName.Get("gridSpan", DocX.w.NamespaceName));
+			}
 
-            /* 
+			/* 
              * Get the val attribute of this row,
              * null will be returned if no such element exists.
              */
-            XAttribute start_val = start_gridSpan.Attribute(XName.Get("val", DocX.w.NamespaceName));
-
-            int start_value = 0;
-            if (start_val != null)
-                if (int.TryParse(start_val.Value, out start_value))
-                    gridSpanSum += start_value - 1;
-
-            // Set the val attribute to the number of merged cells.
-            start_gridSpan.SetAttributeValue(XName.Get("val", DocX.w.NamespaceName), (gridSpanSum + (endIndex - startIndex + 1)).ToString());
-        }
-    }
-
-    public class Cell : Container
-    {
-        internal Row row;
-
-        internal Cell(Row row, DocX document, XElement xml)
-            : base(document, xml)
-        {
-            this.row = row;
-            this.mainPart = row.mainPart;
-        }
-
-        public override ReadOnlyCollection<Paragraph> Paragraphs
-        {
-            get
-            {
-                ReadOnlyCollection<Paragraph> paragraphs = base.Paragraphs;
-
-                foreach (Paragraph p in paragraphs)
-                    p.PackagePart = row.table.mainPart;
-
-                return paragraphs;
-            }
-        }
-        /// <summary>
-        /// Returns the GridSpan of a specific Cell ie. How many cells are merged
-        /// </summary>
-        public int GridSpan
-        {
-            get
-            {
-                var gridSpanVal = 0;
-                XElement tcPr = Xml.Element(XName.Get("tcPr", DocX.w.NamespaceName));
-                XElement gridSpan = tcPr?.Element(XName.Get("gridSpan", DocX.w.NamespaceName));
-                if (gridSpan != null)
-                {
-                    XAttribute val = gridSpan.Attribute(XName.Get("val", DocX.w.NamespaceName));
-
-                    int value;
-                    if (val != null && int.TryParse(val.Value, out value))
-                            gridSpanVal = value;
-                }
-                return gridSpanVal;
-            }
-        }
-
-        /// <summary>
-        /// Gets or Sets this Cells vertical alignment.
-        /// </summary>
-        /// <!--Patch 7398 added by lckuiper on Nov 16th 2010 @ 2:23 PM-->
-        /// <example>
-        /// Creates a table with 3 cells and sets the vertical alignment of each to 1 of the 3 available options.
-        /// <code>
-        /// // Create a new document.
-        ///using(DocX document = DocX.Create("Test.docx"))
-        ///{
-        ///    // Insert a Table into this document.
-        ///    Table t = document.InsertTable(3, 1);
-        ///
-        ///    // Set the design of the Table such that we can easily identify cell boundaries.
-        ///    t.Design = TableDesign.TableGrid;
-        ///
-        ///    // Set the height of the row bigger than default.
-        ///    // We need to be able to see the difference in vertical cell alignment options.
-        ///    t.Rows[0].Height = 100;
-        ///
-        ///    // Set the vertical alignment of cell0 to top.
-        ///    Cell c0 = t.Rows[0].Cells[0];
-        ///    c0.InsertParagraph("VerticalAlignment.Top");
-        ///    c0.VerticalAlignment = VerticalAlignment.Top;
-        ///
-        ///    // Set the vertical alignment of cell1 to center.
-        ///    Cell c1 = t.Rows[0].Cells[1];
-        ///    c1.InsertParagraph("VerticalAlignment.Center");
-        ///    c1.VerticalAlignment = VerticalAlignment.Center;
-        ///
-        ///    // Set the vertical alignment of cell2 to bottom.
-        ///    Cell c2 = t.Rows[0].Cells[2];
-        ///    c2.InsertParagraph("VerticalAlignment.Bottom");
-        ///    c2.VerticalAlignment = VerticalAlignment.Bottom;
-        ///
-        ///    // Save the document.
-        ///    document.Save();
-        ///}
-        /// </code>
-        /// </example>
-        public VerticalAlignment VerticalAlignment
-        {
-            get
-            {
-                /*
-                 * Get the tcPr (table cell properties) element for this Cell,
-                 * null will be return if no such element exists.
-                 */
-                XElement tcPr = Xml.Element(XName.Get("tcPr", DocX.w.NamespaceName));
-
-                // If tcPr is null, this cell contains no width information.
-                // Get the vAlign (table cell vertical alignment) element for this Cell,
-                // null will be return if no such element exists.
-                XElement vAlign = tcPr?.Element(XName.Get("vAlign", DocX.w.NamespaceName));
-
-                // If vAlign is null, this cell contains no vertical alignment information.
-                // Get the val attribute of the vAlign element.
-                XAttribute val = vAlign?.Attribute(XName.Get("val", DocX.w.NamespaceName));
-
-                // If val is null, this cell contains no vAlign information.
-                if (val == null)
-                    return VerticalAlignment.Center;
-
-                // If val is not a VerticalAlign enum, something is wrong with this attributes value, so remove it and return VerticalAlignment.Center;
-                try
-                {
-                    return (VerticalAlignment)Enum.Parse(typeof(VerticalAlignment), val.Value, true);
-                }
-
-                catch
-                {
-                    val.Remove();
-                    return VerticalAlignment.Center;
-                }
-            }
-
-            set
-            {
-                // Get the tcPr (table cell properties) element for this Cell,
-                // null will be return if no such element exists.
-                XElement tcPr = Xml.Element(XName.Get("tcPr", DocX.w.NamespaceName));
-                if (tcPr == null)
-                {
-                    Xml.SetElementValue(XName.Get("tcPr", DocX.w.NamespaceName), string.Empty);
-                    tcPr = Xml.Element(XName.Get("tcPr", DocX.w.NamespaceName));
-                }
-
-                
-                // Get the vAlign (table cell vertical alignment) element for this Cell,
-                // null will be return if no such element exists.
-                XElement vAlign = tcPr.Element(XName.Get("vAlign", DocX.w.NamespaceName));
-                if (vAlign == null)
-                {
-                    tcPr.SetElementValue(XName.Get("vAlign", DocX.w.NamespaceName), string.Empty);
-                    vAlign = tcPr.Element(XName.Get("vAlign", DocX.w.NamespaceName));
-                }
-
-                // Set the VerticalAlignment in 'val'
-                vAlign.SetAttributeValue(XName.Get("val", DocX.w.NamespaceName), value.ToString().ToLower());
-            }
-        }
-
-        public Color Shading
-        {
-            get
-            {
-                // Get the tcPr (table cell properties) element for this Cell,
-                // null will be return if no such element exists.
-                XElement tcPr = Xml.Element(XName.Get("tcPr", DocX.w.NamespaceName));
-
-                // If tcPr is null, this cell contains no Color information.
-                // Get the shd (table shade) element for this Cell,
-                // null will be return if no such element exists.
-                XElement shd = tcPr?.Element(XName.Get("shd", DocX.w.NamespaceName));
-
-                // If shd is null, this cell contains no Color information.
-                // Get the w attribute of the tcW element.
-                XAttribute fill = shd?.Attribute(XName.Get("fill", DocX.w.NamespaceName));
-
-                // If fill is null, this cell contains no Color information.
-                if (fill == null)
-                    return Color.White;
-
-                return ColorTranslator.FromHtml(string.Format("#{0}", fill.Value));
-            }
-
-            set
-            {
-                // Get the tcPr (table cell properties) element for this Cell,
-                // null will be return if no such element exists.
-                XElement tcPr = Xml.Element(XName.Get("tcPr", DocX.w.NamespaceName));
-                if (tcPr == null)
-                {
-                    Xml.SetElementValue(XName.Get("tcPr", DocX.w.NamespaceName), string.Empty);
-                    tcPr = Xml.Element(XName.Get("tcPr", DocX.w.NamespaceName));
-                }
-
-                /*
-                 * Get the shd (table shade) element for this Cell,
-                 * null will be return if no such element exists.
-                 */
-                XElement shd = tcPr.Element(XName.Get("shd", DocX.w.NamespaceName));
-                if (shd == null)
-                {
-                    tcPr.SetElementValue(XName.Get("shd", DocX.w.NamespaceName), string.Empty);
-                    shd = tcPr.Element(XName.Get("shd", DocX.w.NamespaceName));
-                }
-
-                // The val attribute needs to be set to clear
-                shd.SetAttributeValue(XName.Get("val", DocX.w.NamespaceName), "clear");
-
-                // The color attribute needs to be set to auto
-                shd.SetAttributeValue(XName.Get("color", DocX.w.NamespaceName), "auto");
-
-                // The fill attribute needs to be set to the hex for this Color.
-                shd.SetAttributeValue(XName.Get("fill", DocX.w.NamespaceName), value.ToHex());
-            }
-        }
-
-        /// <summary>
-        /// Width in pixels. // Added by Joel, refactored by Cathal
-        /// </summary>
-        public double Width
-        {
-            get
-            {
-                // Get the tcPr (table cell properties) element for this Cell,
-                // null will be return if no such element exists.
-                XElement tcPr = Xml.Element(XName.Get("tcPr", DocX.w.NamespaceName));
-
-                // If tcPr is null, this cell contains no width information.
-                // Get the tcW (table cell width) element for this Cell,
-                // null will be return if no such element exists.
-                XElement tcW = tcPr?.Element(XName.Get("tcW", DocX.w.NamespaceName));
-
-                // If tcW is null, this cell contains no width information.
-                // Get the w attribute of the tcW element.
-                XAttribute w = tcW?.Attribute(XName.Get("w", DocX.w.NamespaceName));
-
-                // If w is null, this cell contains no width information.
-                if (w == null)
-                    return double.NaN;
-
-                // If w is not a double, something is wrong with this attributes value, so remove it and return double.NaN;
-                double widthInWordUnits;
-                if (!double.TryParse(w.Value, out widthInWordUnits))
-                {
-                    w.Remove();
-                    return double.NaN;
-                }
-
-                // 15 "word units" is equal to one pixel.
-                return (widthInWordUnits / 15);
-            }
-
-            set
-            {
-                /*
-                 * Get the tcPr (table cell properties) element for this Cell,
-                 * null will be return if no such element exists.
-                 */
-                XElement tcPr = Xml.Element(XName.Get("tcPr", DocX.w.NamespaceName));
-                if (tcPr == null)
-                {
-                    Xml.SetElementValue(XName.Get("tcPr", DocX.w.NamespaceName), string.Empty);
-                    tcPr = Xml.Element(XName.Get("tcPr", DocX.w.NamespaceName));
-                }
-
-                /*
-                 * Get the tcW (table cell width) element for this Cell,
-                 * null will be return if no such element exists.
-                 */
-                XElement tcW = tcPr.Element(XName.Get("tcW", DocX.w.NamespaceName));
-                if (tcW == null)
-                {
-                    tcPr.SetElementValue(XName.Get("tcW", DocX.w.NamespaceName), string.Empty);
-                    tcW = tcPr.Element(XName.Get("tcW", DocX.w.NamespaceName));
-                }
-
-                if (value == -1)
-                {
-                    // remove cell width; due to set on table prop.
-                    tcW.Remove();
-                    return;
-                }
-
-                // The type attribute needs to be set to dxa which represents "twips" or twentieths of a point. In other words, 1/1440th of an inch.
-                tcW.SetAttributeValue(XName.Get("type", DocX.w.NamespaceName), "dxa");
-
-                // 15 "word units" is equal to one pixel. 
-                tcW.SetAttributeValue(XName.Get("w", DocX.w.NamespaceName), (value * 15).ToString());
-            }
-        }
-
-        /// <summary>
-        /// LeftMargin in pixels. // Added by lckuiper
-        /// </summary>
-        /// <example>
-        /// <code>
-        /// // Create a new document.
-        ///using (DocX document = DocX.Create("Test.docx"))
-        ///{
-        ///    // Insert table into this document.
-        ///    Table t = document.InsertTable(3, 3);
-        ///    t.Design = TableDesign.TableGrid;
-        ///
-        ///    // Get the center cell.
-        ///    Cell center = t.Rows[1].Cells[1];
-        ///
-        ///    // Insert some text so that we can see the effect of the Margins.
-        ///    center.Paragraphs[0].Append("Center Cell");
-        ///
-        ///    // Set the center cells Left, Margin to 10.
-        ///    center.MarginLeft = 25;
-        ///
-        ///    // Save the document.
-        ///    document.Save();
-        ///}
-        /// </code>
-        /// </example>
-        public double MarginLeft
-        {
-            get
-            {
-                /*
-                 * Get the tcPr (table cell properties) element for this Cell,
-                 * null will be return if no such element exists.
-                 */
-                XElement tcPr = Xml.Element(XName.Get("tcPr", DocX.w.NamespaceName));
-
-                // If tcPr is null, this cell contains no width information.
-                if (tcPr == null)
-                    return double.NaN;
-
-                /*
-                 * Get the tcMar
-                 * 
-                 */
-                XElement tcMar = tcPr.Element(XName.Get("tcMar", DocX.w.NamespaceName));
-
-                // If tcMar is null, this cell contains no margin information.
-                // Get the left (LeftMargin) element
-                XElement tcMarLeft = tcMar?.Element(XName.Get("left", DocX.w.NamespaceName));
-
-                // If tcMarLeft is null, this cell contains no left margin information.
-                // Get the w attribute of the tcMarLeft element.
-                XAttribute w = tcMarLeft?.Attribute(XName.Get("w", DocX.w.NamespaceName));
-
-                // If w is null, this cell contains no width information.
-                if (w == null)
-                    return double.NaN;
-
-                // If w is not a double, something is wrong with this attributes value, so remove it and return double.NaN;
-                double leftMarginInWordUnits;
-                if (!double.TryParse(w.Value, out leftMarginInWordUnits))
-                {
-                    w.Remove();
-                    return double.NaN;
-                }
-
-                // 15 "word units" is equal to one pixel.
-                return (leftMarginInWordUnits / 15);
-            }
-
-            set
-            {
-                /*
-                 * Get the tcPr (table cell properties) element for this Cell,
-                 * null will be return if no such element exists.
-                 */
-                XElement tcPr = Xml.Element(XName.Get("tcPr", DocX.w.NamespaceName));
-                if (tcPr == null)
-                {
-                    Xml.SetElementValue(XName.Get("tcPr", DocX.w.NamespaceName), string.Empty);
-                    tcPr = Xml.Element(XName.Get("tcPr", DocX.w.NamespaceName));
-                }
-
-                /*
-                 * Get the tcMar (table cell margin) element for this Cell,
-                 * null will be return if no such element exists.
-                 */
-                XElement tcMar = tcPr.Element(XName.Get("tcMar", DocX.w.NamespaceName));
-                if (tcMar == null)
-                {
-                    tcPr.SetElementValue(XName.Get("tcMar", DocX.w.NamespaceName), string.Empty);
-                    tcMar = tcPr.Element(XName.Get("tcMar", DocX.w.NamespaceName));
-                }
-
-                /*
-                 * Get the left (table cell left margin) element for this Cell,
-                 * null will be return if no such element exists.
-                 */
-                XElement tcMarLeft = tcMar.Element(XName.Get("left", DocX.w.NamespaceName));
-                if (tcMarLeft == null)
-                {
-                    tcMar.SetElementValue(XName.Get("left", DocX.w.NamespaceName), string.Empty);
-                    tcMarLeft = tcMar.Element(XName.Get("left", DocX.w.NamespaceName));
-                }
-
-                // The type attribute needs to be set to dxa which represents "twips" or twentieths of a point. In other words, 1/1440th of an inch.
-                tcMarLeft.SetAttributeValue(XName.Get("type", DocX.w.NamespaceName), "dxa");
-
-                // 15 "word units" is equal to one pixel. 
-                tcMarLeft.SetAttributeValue(XName.Get("w", DocX.w.NamespaceName), (value * 15).ToString());
-            }
-        }
-
-        /// <summary>
-        /// RightMargin in pixels. // Added by lckuiper
-        /// </summary>
-        /// <example>
-        /// <code>
-        /// // Create a new document.
-        ///using (DocX document = DocX.Create("Test.docx"))
-        ///{
-        ///    // Insert table into this document.
-        ///    Table t = document.InsertTable(3, 3);
-        ///    t.Design = TableDesign.TableGrid;
-        ///
-        ///    // Get the center cell.
-        ///    Cell center = t.Rows[1].Cells[1];
-        ///
-        ///    // Insert some text so that we can see the effect of the Margins.
-        ///    center.Paragraphs[0].Append("Center Cell");
-        ///
-        ///    // Set the center cells Right, Margin to 10.
-        ///    center.MarginRight = 25;
-        ///
-        ///    // Save the document.
-        ///    document.Save();
-        ///}
-        /// </code>
-        /// </example>
-        public double MarginRight
-        {
-            get
-            {
-                /*
-                 * Get the tcPr (table cell properties) element for this Cell,
-                 * null will be return if no such element exists.
-                 */
-                XElement tcPr = Xml.Element(XName.Get("tcPr", DocX.w.NamespaceName));
-
-                // If tcPr is null, this cell contains no width information.
-                if (tcPr == null)
-                    return double.NaN;
-
-                /*
-                 * Get the tcMar
-                 * 
-                 */
-                XElement tcMar = tcPr.Element(XName.Get("tcMar", DocX.w.NamespaceName));
-
-                // If tcMar is null, this cell contains no margin information.
-                // Get the right (RightMargin) element
-                XElement tcMarRight = tcMar?.Element(XName.Get("right", DocX.w.NamespaceName));
-
-                // If tcMarRight is null, this cell contains no right margin information.
-                // Get the w attribute of the tcMarRight element.
-                XAttribute w = tcMarRight?.Attribute(XName.Get("w", DocX.w.NamespaceName));
-
-                // If w is null, this cell contains no width information.
-                if (w == null)
-                    return double.NaN;
-
-                // If w is not a double, something is wrong with this attributes value, so remove it and return double.NaN;
-                double rightMarginInWordUnits;
-                if (!double.TryParse(w.Value, out rightMarginInWordUnits))
-                {
-                    w.Remove();
-                    return double.NaN;
-                }
-
-                // 15 "word units" is equal to one pixel.
-                return (rightMarginInWordUnits / 15);
-            }
-
-            set
-            {
-                /*
-                 * Get the tcPr (table cell properties) element for this Cell,
-                 * null will be return if no such element exists.
-                 */
-                XElement tcPr = Xml.Element(XName.Get("tcPr", DocX.w.NamespaceName));
-                if (tcPr == null)
-                {
-                    Xml.SetElementValue(XName.Get("tcPr", DocX.w.NamespaceName), string.Empty);
-                    tcPr = Xml.Element(XName.Get("tcPr", DocX.w.NamespaceName));
-                }
-
-                /*
-                 * Get the tcMar (table cell margin) element for this Cell,
-                 * null will be return if no such element exists.
-                 */
-                XElement tcMar = tcPr.Element(XName.Get("tcMar", DocX.w.NamespaceName));
-                if (tcMar == null)
-                {
-                    tcPr.SetElementValue(XName.Get("tcMar", DocX.w.NamespaceName), string.Empty);
-                    tcMar = tcPr.Element(XName.Get("tcMar", DocX.w.NamespaceName));
-                }
-
-                /*
-                 * Get the right (table cell right margin) element for this Cell,
-                 * null will be return if no such element exists.
-                 */
-                XElement tcMarRight = tcMar.Element(XName.Get("right", DocX.w.NamespaceName));
-                if (tcMarRight == null)
-                {
-                    tcMar.SetElementValue(XName.Get("right", DocX.w.NamespaceName), string.Empty);
-                    tcMarRight = tcMar.Element(XName.Get("right", DocX.w.NamespaceName));
-                }
-
-                // The type attribute needs to be set to dxa which represents "twips" or twentieths of a point. In other words, 1/1440th of an inch.
-                tcMarRight.SetAttributeValue(XName.Get("type", DocX.w.NamespaceName), "dxa");
-
-                // 15 "word units" is equal to one pixel. 
-                tcMarRight.SetAttributeValue(XName.Get("w", DocX.w.NamespaceName), (value * 15).ToString());
-            }
-        }
-
-        /// <summary>
-        /// TopMargin in pixels. // Added by lckuiper
-        /// </summary>
-        /// <example>
-        /// <code>
-        /// // Create a new document.
-        ///using (DocX document = DocX.Create("Test.docx"))
-        ///{
-        ///    // Insert table into this document.
-        ///    Table t = document.InsertTable(3, 3);
-        ///    t.Design = TableDesign.TableGrid;
-        ///
-        ///    // Get the center cell.
-        ///    Cell center = t.Rows[1].Cells[1];
-        ///
-        ///    // Insert some text so that we can see the effect of the Margins.
-        ///    center.Paragraphs[0].Append("Center Cell");
-        ///
-        ///    // Set the center cells Top, Margin to 10.
-        ///    center.MarginTop = 25;
-        ///
-        ///    // Save the document.
-        ///    document.Save();
-        ///}
-        /// </code>
-        /// </example>
-        public double MarginTop
-        {
-            get
-            {
-                /*
-                 * Get the tcPr (table cell properties) element for this Cell,
-                 * null will be return if no such element exists.
-                 */
-                XElement tcPr = Xml.Element(XName.Get("tcPr", DocX.w.NamespaceName));
-
-                // If tcPr is null, this cell contains no width information.
-                if (tcPr == null)
-                    return double.NaN;
-
-                /*
-                 * Get the tcMar
-                 * 
-                 */
-                XElement tcMar = tcPr.Element(XName.Get("tcMar", DocX.w.NamespaceName));
-
-                // If tcMar is null, this cell contains no margin information.
-                // Get the top (TopMargin) element
-                XElement tcMarTop = tcMar?.Element(XName.Get("top", DocX.w.NamespaceName));
-
-                // If tcMarTop is null, this cell contains no top margin information.
-                // Get the w attribute of the tcMarTop element.
-                XAttribute w = tcMarTop?.Attribute(XName.Get("w", DocX.w.NamespaceName));
-
-                // If w is null, this cell contains no width information.
-                if (w == null)
-                    return double.NaN;
-
-                // If w is not a double, something is wrong with this attributes value, so remove it and return double.NaN;
-                double topMarginInWordUnits;
-                if (!double.TryParse(w.Value, out topMarginInWordUnits))
-                {
-                    w.Remove();
-                    return double.NaN;
-                }
-
-                // 15 "word units" is equal to one pixel.
-                return (topMarginInWordUnits / 15);
-            }
-
-            set
-            {
-                /*
-                 * Get the tcPr (table cell properties) element for this Cell,
-                 * null will be return if no such element exists.
-                 */
-                XElement tcPr = Xml.Element(XName.Get("tcPr", DocX.w.NamespaceName));
-                if (tcPr == null)
-                {
-                    Xml.SetElementValue(XName.Get("tcPr", DocX.w.NamespaceName), string.Empty);
-                    tcPr = Xml.Element(XName.Get("tcPr", DocX.w.NamespaceName));
-                }
-
-                /*
-                 * Get the tcMar (table cell margin) element for this Cell,
-                 * null will be return if no such element exists.
-                 */
-                XElement tcMar = tcPr.Element(XName.Get("tcMar", DocX.w.NamespaceName));
-                if (tcMar == null)
-                {
-                    tcPr.SetElementValue(XName.Get("tcMar", DocX.w.NamespaceName), string.Empty);
-                    tcMar = tcPr.Element(XName.Get("tcMar", DocX.w.NamespaceName));
-                }
-
-                /*
-                 * Get the top (table cell top margin) element for this Cell,
-                 * null will be return if no such element exists.
-                 */
-                XElement tcMarTop = tcMar.Element(XName.Get("top", DocX.w.NamespaceName));
-                if (tcMarTop == null)
-                {
-                    tcMar.SetElementValue(XName.Get("top", DocX.w.NamespaceName), string.Empty);
-                    tcMarTop = tcMar.Element(XName.Get("top", DocX.w.NamespaceName));
-                }
-
-                // The type attribute needs to be set to dxa which represents "twips" or twentieths of a point. In other words, 1/1440th of an inch.
-                tcMarTop.SetAttributeValue(XName.Get("type", DocX.w.NamespaceName), "dxa");
-
-                // 15 "word units" is equal to one pixel. 
-                tcMarTop.SetAttributeValue(XName.Get("w", DocX.w.NamespaceName), (value * 15).ToString());
-            }
-        }
-
-        /// <summary>
-        /// BottomMargin in pixels. // Added by lckuiper
-        /// </summary>
-        /// <example>
-        /// <code>
-        /// // Create a new document.
-        ///using (DocX document = DocX.Create("Test.docx"))
-        ///{
-        ///    // Insert table into this document.
-        ///    Table t = document.InsertTable(3, 3);
-        ///    t.Design = TableDesign.TableGrid;
-        ///
-        ///    // Get the center cell.
-        ///    Cell center = t.Rows[1].Cells[1];
-        ///
-        ///    // Insert some text so that we can see the effect of the Margins.
-        ///    center.Paragraphs[0].Append("Center Cell");
-        ///
-        ///    // Set the center cells Top, Margin to 10.
-        ///    center.MarginBottom = 25;
-        ///
-        ///    // Save the document.
-        ///    document.Save();
-        ///}
-        /// </code>
-        /// </example>
-        public double MarginBottom
-        {
-            get
-            {
-                /*
-                 * Get the tcPr (table cell properties) element for this Cell,
-                 * null will be return if no such element exists.
-                 */
-                XElement tcPr = Xml.Element(XName.Get("tcPr", DocX.w.NamespaceName));
-
-                // If tcPr is null, this cell contains no width information.
-
-                /*
-                 * Get the tcMar
-                 * 
-                 */
-                XElement tcMar = tcPr?.Element(XName.Get("tcMar", DocX.w.NamespaceName));
-
-                // If tcMar is null, this cell contains no margin information.
-                if (tcMar == null)
-                    return double.NaN;
-
-                // Get the bottom (BottomMargin) element
-                XElement tcMarBottom = tcMar.Element(XName.Get("bottom", DocX.w.NamespaceName));
-
-                // If tcMarBottom is null, this cell contains no bottom margin information.
-
-                // Get the w attribute of the tcMarBottom element.
-                XAttribute w = tcMarBottom?.Attribute(XName.Get("w", DocX.w.NamespaceName));
-
-                // If w is null, this cell contains no width information.
-                if (w == null)
-                    return double.NaN;
-
-                // If w is not a double, something is wrong with this attributes value, so remove it and return double.NaN;
-                double bottomMarginInWordUnits;
-                if (!double.TryParse(w.Value, out bottomMarginInWordUnits))
-                {
-                    w.Remove();
-                    return double.NaN;
-                }
-
-                // 15 "word units" is equal to one pixel.
-                return (bottomMarginInWordUnits / 15);
-            }
-
-            set
-            {
-                /*
-                 * Get the tcPr (table cell properties) element for this Cell,
-                 * null will be return if no such element exists.
-                 */
-                XElement tcPr = Xml.Element(XName.Get("tcPr", DocX.w.NamespaceName));
-                if (tcPr == null)
-                {
-                    Xml.SetElementValue(XName.Get("tcPr", DocX.w.NamespaceName), string.Empty);
-                    tcPr = Xml.Element(XName.Get("tcPr", DocX.w.NamespaceName));
-                }
-
-                /*
-                 * Get the tcMar (table cell margin) element for this Cell,
-                 * null will be return if no such element exists.
-                 */
-                XElement tcMar = tcPr.Element(XName.Get("tcMar", DocX.w.NamespaceName));
-                if (tcMar == null)
-                {
-                    tcPr.SetElementValue(XName.Get("tcMar", DocX.w.NamespaceName), string.Empty);
-                    tcMar = tcPr.Element(XName.Get("tcMar", DocX.w.NamespaceName));
-                }
-
-                /*
-                 * Get the bottom (table cell bottom margin) element for this Cell,
-                 * null will be return if no such element exists.
-                 */
-                XElement tcMarBottom = tcMar.Element(XName.Get("bottom", DocX.w.NamespaceName));
-                if (tcMarBottom == null)
-                {
-                    tcMar.SetElementValue(XName.Get("bottom", DocX.w.NamespaceName), string.Empty);
-                    tcMarBottom = tcMar.Element(XName.Get("bottom", DocX.w.NamespaceName));
-                }
-
-                // The type attribute needs to be set to dxa which represents "twips" or twentieths of a point. In other words, 1/1440th of an inch.
-                tcMarBottom.SetAttributeValue(XName.Get("type", DocX.w.NamespaceName), "dxa");
-
-                // 15 "word units" is equal to one pixel. 
-                tcMarBottom.SetAttributeValue(XName.Get("w", DocX.w.NamespaceName), (value * 15).ToString());
-            }
-        }
-
-        /// <summary>
-        /// Set the table cell border
-        /// Added by lckuiper @ 20101117
-        /// </summary>
-        /// <example>
-        /// <code>
-        /// // Create a new document.
-        ///using (DocX document = DocX.Create("Test.docx"))
-        ///{
-        ///    // Insert a table into this document.
-        ///    Table t = document.InsertTable(3, 3);
-        ///
-        ///    // Get the center cell.
-        ///    Cell center = t.Rows[1].Cells[1];
-        ///
-        ///    // Create a large blue border.
-        ///    Border b = new Border(BorderStyle.Tcbs_single, BorderSize.seven, 0, Color.Blue);
-        ///
-        ///    // Set the center cells Top, Bottom, Left and Right Borders to b.
-        ///    center.SetBorder(TableCellBorderType.Top, b);
-        ///    center.SetBorder(TableCellBorderType.Bottom, b);
-        ///    center.SetBorder(TableCellBorderType.Left, b);
-        ///    center.SetBorder(TableCellBorderType.Right, b);
-        ///
-        ///    // Save the document.
-        ///    document.Save();
-        ///}
-        /// </code>
-        /// </example>
-        /// <param name="borderType">Table Cell border to set</param>
-        /// <param name="border">Border object to set the table cell border</param>
-        public void SetBorder(TableCellBorderType borderType, Border border)
-        {
-            /*
-             * Get the tcPr (table cell properties) element for this Cell,
-             * null will be return if no such element exists.
-             */
-            XElement tcPr = Xml.Element(XName.Get("tcPr", DocX.w.NamespaceName));
-            if (tcPr == null)
-            {
-                Xml.SetElementValue(XName.Get("tcPr", DocX.w.NamespaceName), string.Empty);
-                tcPr = Xml.Element(XName.Get("tcPr", DocX.w.NamespaceName));
-            }
-
-            /*
-             * Get the tblBorders (table cell borders) element for this Cell,
-             * null will be return if no such element exists.
-             */
-            XElement tcBorders = tcPr.Element(XName.Get("tcBorders", DocX.w.NamespaceName));
-            if (tcBorders == null)
-            {
-                tcPr.SetElementValue(XName.Get("tcBorders", DocX.w.NamespaceName), string.Empty);
-                tcBorders = tcPr.Element(XName.Get("tcBorders", DocX.w.NamespaceName));
-            }
-
-            /*
-             * Get the 'borderType' (table cell border) element for this Cell,
-             * null will be return if no such element exists.
-             */
-            string tcbordertype;
-            switch (borderType)
-            {
-                case TableCellBorderType.TopLeftToBottomRight:
-                    tcbordertype = "tl2br";
-                    break;
-                case TableCellBorderType.TopRightToBottomLeft:
-                    tcbordertype = "tr2bl";
-                    break;
-                default:
-                    // enum to string
-                    tcbordertype = borderType.ToString();
-                    // only lower the first char of string (because of insideH and insideV)
-                    tcbordertype = tcbordertype.Substring(0, 1).ToLower() + tcbordertype.Substring(1);
-                    break;
-            }
-
-            XElement tcBorderType = tcBorders.Element(XName.Get(borderType.ToString(), DocX.w.NamespaceName));
-            if (tcBorderType == null)
-            {
-                tcBorders.SetElementValue(XName.Get(tcbordertype, DocX.w.NamespaceName), string.Empty);
-                tcBorderType = tcBorders.Element(XName.Get(tcbordertype, DocX.w.NamespaceName));
-            }
-
-            // get string value of border style
-            string borderstyle = border.Tcbs.ToString().Substring(5);
-            borderstyle = borderstyle.Substring(0, 1).ToLower() + borderstyle.Substring(1);
-
-            // The val attribute is used for the border style
-            tcBorderType.SetAttributeValue(XName.Get("val", DocX.w.NamespaceName), borderstyle);
-
-            int size;
-            switch (border.Size)
-            {
-                case BorderSize.one: size = 2; break;
-                case BorderSize.two: size = 4; break;
-                case BorderSize.three: size = 6; break;
-                case BorderSize.four: size = 8; break;
-                case BorderSize.five: size = 12; break;
-                case BorderSize.six: size = 18; break;
-                case BorderSize.seven: size = 24; break;
-                case BorderSize.eight: size = 36; break;
-                case BorderSize.nine: size = 48; break;
-                default: size = 2; break;
-            }
-
-            // The sz attribute is used for the border size
-            tcBorderType.SetAttributeValue(XName.Get("sz", DocX.w.NamespaceName), (size).ToString());
-
-            // The space attribute is used for the cell spacing (probably '0')
-            tcBorderType.SetAttributeValue(XName.Get("space", DocX.w.NamespaceName), (border.Space).ToString());
-
-            // The color attribute is used for the border color
-            tcBorderType.SetAttributeValue(XName.Get("color", DocX.w.NamespaceName), border.Color.ToHex());
-        }
-
-
-        /// <summary>
-        /// Get a table cell border
-        /// Added by lckuiper @ 20101117
-        /// </summary>
-        /// <param name="borderType">The table cell border to get</param>
-        public Border GetBorder(TableCellBorderType borderType)
-        {
-            // instance with default border values
-            var b = new Border();
-
-            /*
-             * Get the tcPr (table cell properties) element for this Cell,
-             * null will be return if no such element exists.
-             */
-            XElement tcPr = Xml.Element(XName.Get("tcPr", DocX.w.NamespaceName));
-            if (tcPr == null)
-            {
-                // uses default border style
-            }
-
-            /*
-             * Get the tcBorders (table cell borders) element for this Cell,
-             * null will be return if no such element exists.
-             */
-            XElement tcBorders = tcPr.Element(XName.Get("tcBorders", DocX.w.NamespaceName));
-            if (tcBorders == null)
-            {
-                // uses default border style
-            }
-
-            /*
-             * Get the 'borderType' (cell border) element for this Cell,
-             * null will be return if no such element exists.
-             */
-            var tcbordertype = borderType.ToString();
-
-            switch (tcbordertype)
-            {
-                case "TopLeftToBottomRight":
-                    tcbordertype = "tl2br";
-                    break;
-                case "TopRightToBottomLeft":
-                    tcbordertype = "tr2bl";
-                    break;
-                default:
-                    // only lower the first char of string (because of insideH and insideV)
-                    tcbordertype = tcbordertype.Substring(0, 1).ToLower() + tcbordertype.Substring(1);
-                    break;
-            }
-
-            XElement tcBorderType = tcBorders.Element(XName.Get(tcbordertype, DocX.w.NamespaceName));
-            if (tcBorderType == null)
-            {
-                // uses default border style
-            }
-
-            // The val attribute is used for the border style
-            XAttribute val = tcBorderType.Attribute(XName.Get("val", DocX.w.NamespaceName));
-            // If val is null, this cell contains no border information.
-            if (val == null)
-            {
-                // uses default border style
-            }
-            else
-            {
-                try
-                {
-                    string bordertype = "Tcbs_" + val.Value;
-                    b.Tcbs = (BorderStyle)Enum.Parse(typeof(BorderStyle), bordertype);
-                }
-
-                catch
-                {
-                    val.Remove();
-                    // uses default border style
-                }
-            }
-
-            // The sz attribute is used for the border size
-            XAttribute sz = tcBorderType.Attribute(XName.Get("sz", DocX.w.NamespaceName));
-            // If sz is null, this border contains no size information.
-            if (sz == null)
-            {
-                // uses default border style
-            }
-            else
-            {
-                // If sz is not an int, something is wrong with this attributes value, so remove it
-                int numerical_size;
-                if (!int.TryParse(sz.Value, out numerical_size))
-                    sz.Remove();
-                else
-                {
-                    switch (numerical_size)
-                    {
-                        case 2: b.Size = BorderSize.one; break;
-                        case 4: b.Size = BorderSize.two; break;
-                        case 6: b.Size = BorderSize.three; break;
-                        case 8: b.Size = BorderSize.four; break;
-                        case 12: b.Size = BorderSize.five; break;
-                        case 18: b.Size = BorderSize.six; break;
-                        case 24: b.Size = BorderSize.seven; break;
-                        case 36: b.Size = BorderSize.eight; break;
-                        case 48: b.Size = BorderSize.nine; break;
-                        default: b.Size = BorderSize.one; break;
-                    }
-                }
-            }
-
-            // The space attribute is used for the border spacing (probably '0')
-            XAttribute space = tcBorderType.Attribute(XName.Get("space", DocX.w.NamespaceName));
-            // If space is null, this border contains no space information.
-            if (space == null)
-            {
-                // uses default border style
-            }
-            else
-            {
-                // If space is not an int, something is wrong with this attributes value, so remove it
-                int borderspace;
-                if (!int.TryParse(space.Value, out borderspace))
-                {
-                    space.Remove();
-                    // uses default border style
-                }
-                else
-                {
-                    b.Space = borderspace;
-                }
-            }
-
-            // The color attribute is used for the border color
-            XAttribute color = tcBorderType.Attribute(XName.Get("color", DocX.w.NamespaceName));
-            if (color == null)
-            {
-                // uses default border style
-            }
-            else
-            {
-                // If color is not a Color, something is wrong with this attributes value, so remove it
-                try
-                {
-                    b.Color = ColorTranslator.FromHtml(string.Format("#{0}", color.Value));
-                }
-                catch
-                {
-                    color.Remove();
-                    // uses default border style
-                }
-            }
-            return b;
-        }
-
-        /// <summary>
-        /// Gets or Sets the fill color of this Cell.
-        /// </summary>
-        /// <example>
-        /// <code>
-        /// // Create a new document.
-        /// using (DocX document = DocX.Create("Test.docx"))
-        /// {
-        ///    // Insert a table into this document.
-        ///    Table t = document.InsertTable(3, 3);
-        ///
-        ///    // Fill the first cell as Blue.
-        ///    t.Rows[0].Cells[0].FillColor = Color.Blue;
-        ///    // Fill the middle cell as Red.
-        ///    t.Rows[1].Cells[1].FillColor = Color.Red;
-        ///    // Fill the last cell as Green.
-        ///    t.Rows[2].Cells[2].FillColor = Color.Green;
-        ///
-        ///    // Save the document.
-        ///    document.Save();
-        /// }
-        /// </code>
-        /// </example>
-        public Color FillColor
-        {
-            get
-            {
-                /*
-                 * Get the tcPr (table cell properties) element for this Cell,
-                 * null will be return if no such element exists.
-                 */
-                XElement tcPr = Xml.Element(XName.Get("tcPr", DocX.w.NamespaceName));
-                XElement shd = tcPr?.Element(XName.Get("shd", DocX.w.NamespaceName));
-                XAttribute fill = shd?.Attribute(XName.Get("fill", DocX.w.NamespaceName));
-                if (fill == null)
-                    return Color.Empty;
-                int argb = Int32.Parse(fill.Value.Replace("#", ""), NumberStyles.HexNumber);
-                return Color.FromArgb(argb);
-            }
-
-            set
-            {
-                /*
-                 * Get the tcPr (table cell properties) element for this Cell,
-                 * null will be return if no such element exists.
-                 */
-                XElement tcPr = Xml.Element(XName.Get("tcPr", DocX.w.NamespaceName));
-                if (tcPr == null)
-                {
-                    Xml.SetElementValue(XName.Get("tcPr", DocX.w.NamespaceName), string.Empty);
-                    tcPr = Xml.Element(XName.Get("tcPr", DocX.w.NamespaceName));
-                }
-
-                /*
-                 * Get the tcW (table cell width) element for this Cell,
-                 * null will be return if no such element exists.
-                 */
-                XElement shd = tcPr.Element(XName.Get("shd", DocX.w.NamespaceName));
-                if (shd == null)
-                {
-                    tcPr.SetElementValue(XName.Get("shd", DocX.w.NamespaceName), string.Empty);
-                    shd = tcPr.Element(XName.Get("shd", DocX.w.NamespaceName));
-                }
-
-                shd.SetAttributeValue(XName.Get("val", DocX.w.NamespaceName), "clear");
-                shd.SetAttributeValue(XName.Get("color", DocX.w.NamespaceName), "auto");
-                shd.SetAttributeValue(XName.Get("fill", DocX.w.NamespaceName), value.ToHex());
-            }
-        }
-
-        public override Table InsertTable(int rowCount, int columnCount)
-        {
-            Table table = base.InsertTable(rowCount, columnCount);
-            table.mainPart = mainPart;
-            InsertParagraph(); //Dmitchern, It is necessary to put paragraph in the end of the cell, without it MS-Word will say that the document is corrupted
-            //IMPORTANT: It will be better to check all methods that work with adding anything to cells
-            return table;
-        }
-
-        public TextDirection TextDirection
-        {
-            get
-            {
-                XElement tcPr = Xml.Element(XName.Get("tcPr", DocX.w.NamespaceName));
-
-                // If tcPr is null, this cell contains no width information.
-                XElement textDirection = tcPr?.Element(XName.Get("textDirection", DocX.w.NamespaceName));
-                XAttribute val = textDirection?.Attribute(XName.Get("val", DocX.w.NamespaceName));
-                if (val == null)
-                    return TextDirection.right;
-
-                // If val is not a VerticalAlign enum, something is wrong with this attributes value, so remove it and return VerticalAlignment.Center;
-                try
-                {
-                    return (TextDirection)Enum.Parse(typeof(TextDirection), val.Value, true);
-                }
-                catch
-                {
-                    val.Remove();
-                    return TextDirection.right;
-                }
-            }
-            set
-            {
-                /*
-                    * Get the tcPr (table cell properties) element for this Cell,
-                    * null will be return if no such element exists.
-                    */
-                XElement tcPr = Xml.Element(XName.Get("tcPr", DocX.w.NamespaceName));
-                if (tcPr == null)
-                {
-                    Xml.SetElementValue(XName.Get("tcPr", DocX.w.NamespaceName), string.Empty);
-                    tcPr = Xml.Element(XName.Get("tcPr", DocX.w.NamespaceName));
-                }
-
-                /*
-                 * Get the vAlign (table cell vertical alignment) element for this Cell,
-                 * null will be return if no such element exists.
-                 */
-                XElement textDirection = tcPr.Element(XName.Get("textDirection", DocX.w.NamespaceName));
-                if (textDirection == null)
-                {
-                    tcPr.SetElementValue(XName.Get("textDirection", DocX.w.NamespaceName), string.Empty);
-                    textDirection = tcPr.Element(XName.Get("textDirection", DocX.w.NamespaceName));
-                }
-
-                // Set the VerticalAlignment in 'val'
-                textDirection.SetAttributeValue(XName.Get("val", DocX.w.NamespaceName), value.ToString());
-
-            }
-        }
-    }
-
-
-    public class TableLook
-    {
-        public bool FirstRow { get; set; }
-        public bool LastRow { get; set; }
-        public bool FirstColumn { get; set; }
-        public bool LastColumn { get; set; }
-        public bool NoHorizontalBanding { get; set; }
-        public bool NoVerticalBanding { get; set; }
-    }
-
+			XAttribute start_val = start_gridSpan.Attribute(XName.Get("val", DocX.w.NamespaceName));
+
+			int start_value = 0;
+			if (start_val != null)
+				if (int.TryParse(start_val.Value, out start_value))
+					gridSpanSum += start_value - 1;
+
+			// Set the val attribute to the number of merged cells.
+			start_gridSpan.SetAttributeValue(XName.Get("val", DocX.w.NamespaceName), (gridSpanSum + (endIndex - startIndex + 1)).ToString());
+		}
+	}
+
+	public class Cell : Container
+	{
+		internal Row row;
+
+		internal Cell(Row row, DocX document, XElement xml)
+			: base(document, xml)
+		{
+			this.row = row;
+			this.mainPart = row.mainPart;
+		}
+
+		public override ReadOnlyCollection<Paragraph> Paragraphs
+		{
+			get
+			{
+				ReadOnlyCollection<Paragraph> paragraphs = base.Paragraphs;
+
+				foreach (Paragraph p in paragraphs)
+					p.PackagePart = row.table.mainPart;
+
+				return paragraphs;
+			}
+		}
+		/// <summary>
+		/// Returns the GridSpan of a specific Cell ie. How many cells are merged
+		/// </summary>
+		public int GridSpan
+		{
+			get
+			{
+				var gridSpanVal = 0;
+				XElement tcPr = Xml.Element(XName.Get("tcPr", DocX.w.NamespaceName));
+				XElement gridSpan = tcPr?.Element(XName.Get("gridSpan", DocX.w.NamespaceName));
+				if (gridSpan != null)
+				{
+					XAttribute val = gridSpan.Attribute(XName.Get("val", DocX.w.NamespaceName));
+
+					int value;
+					if (val != null && int.TryParse(val.Value, out value))
+						gridSpanVal = value;
+				}
+				return gridSpanVal;
+			}
+		}
+
+		/// <summary>
+		/// Gets or Sets this Cells vertical alignment.
+		/// </summary>
+		/// <!--Patch 7398 added by lckuiper on Nov 16th 2010 @ 2:23 PM-->
+		/// <example>
+		/// Creates a table with 3 cells and sets the vertical alignment of each to 1 of the 3 available options.
+		/// <code>
+		/// // Create a new document.
+		///using(DocX document = DocX.Create("Test.docx"))
+		///{
+		///    // Insert a Table into this document.
+		///    Table t = document.InsertTable(3, 1);
+		///
+		///    // Set the design of the Table such that we can easily identify cell boundaries.
+		///    t.Design = TableDesign.TableGrid;
+		///
+		///    // Set the height of the row bigger than default.
+		///    // We need to be able to see the difference in vertical cell alignment options.
+		///    t.Rows[0].Height = 100;
+		///
+		///    // Set the vertical alignment of cell0 to top.
+		///    Cell c0 = t.Rows[0].Cells[0];
+		///    c0.InsertParagraph("VerticalAlignment.Top");
+		///    c0.VerticalAlignment = VerticalAlignment.Top;
+		///
+		///    // Set the vertical alignment of cell1 to center.
+		///    Cell c1 = t.Rows[0].Cells[1];
+		///    c1.InsertParagraph("VerticalAlignment.Center");
+		///    c1.VerticalAlignment = VerticalAlignment.Center;
+		///
+		///    // Set the vertical alignment of cell2 to bottom.
+		///    Cell c2 = t.Rows[0].Cells[2];
+		///    c2.InsertParagraph("VerticalAlignment.Bottom");
+		///    c2.VerticalAlignment = VerticalAlignment.Bottom;
+		///
+		///    // Save the document.
+		///    document.Save();
+		///}
+		/// </code>
+		/// </example>
+		public VerticalAlignment VerticalAlignment
+		{
+			get
+			{
+				/*
+				 * Get the tcPr (table cell properties) element for this Cell,
+				 * null will be return if no such element exists.
+				 */
+				XElement tcPr = Xml.Element(XName.Get("tcPr", DocX.w.NamespaceName));
+
+				// If tcPr is null, this cell contains no width information.
+				// Get the vAlign (table cell vertical alignment) element for this Cell,
+				// null will be return if no such element exists.
+				XElement vAlign = tcPr?.Element(XName.Get("vAlign", DocX.w.NamespaceName));
+
+				// If vAlign is null, this cell contains no vertical alignment information.
+				// Get the val attribute of the vAlign element.
+				XAttribute val = vAlign?.Attribute(XName.Get("val", DocX.w.NamespaceName));
+
+				// If val is null, this cell contains no vAlign information.
+				if (val == null)
+					return VerticalAlignment.Center;
+
+				// If val is not a VerticalAlign enum, something is wrong with this attributes value, so remove it and return VerticalAlignment.Center;
+				try
+				{
+					return (VerticalAlignment)Enum.Parse(typeof(VerticalAlignment), val.Value, true);
+				}
+
+				catch
+				{
+					val.Remove();
+					return VerticalAlignment.Center;
+				}
+			}
+
+			set
+			{
+				// Get the tcPr (table cell properties) element for this Cell,
+				// null will be return if no such element exists.
+				XElement tcPr = Xml.Element(XName.Get("tcPr", DocX.w.NamespaceName));
+				if (tcPr == null)
+				{
+					Xml.SetElementValue(XName.Get("tcPr", DocX.w.NamespaceName), string.Empty);
+					tcPr = Xml.Element(XName.Get("tcPr", DocX.w.NamespaceName));
+				}
+
+
+				// Get the vAlign (table cell vertical alignment) element for this Cell,
+				// null will be return if no such element exists.
+				XElement vAlign = tcPr.Element(XName.Get("vAlign", DocX.w.NamespaceName));
+				if (vAlign == null)
+				{
+					tcPr.SetElementValue(XName.Get("vAlign", DocX.w.NamespaceName), string.Empty);
+					vAlign = tcPr.Element(XName.Get("vAlign", DocX.w.NamespaceName));
+				}
+
+				// Set the VerticalAlignment in 'val'
+				vAlign.SetAttributeValue(XName.Get("val", DocX.w.NamespaceName), value.ToString().ToLower());
+			}
+		}
+
+		public Color Shading
+		{
+			get
+			{
+				// Get the tcPr (table cell properties) element for this Cell,
+				// null will be return if no such element exists.
+				XElement tcPr = Xml.Element(XName.Get("tcPr", DocX.w.NamespaceName));
+
+				// If tcPr is null, this cell contains no Color information.
+				// Get the shd (table shade) element for this Cell,
+				// null will be return if no such element exists.
+				XElement shd = tcPr?.Element(XName.Get("shd", DocX.w.NamespaceName));
+
+				// If shd is null, this cell contains no Color information.
+				// Get the w attribute of the tcW element.
+				XAttribute fill = shd?.Attribute(XName.Get("fill", DocX.w.NamespaceName));
+
+				// If fill is null, this cell contains no Color information.
+				if (fill == null)
+					return Color.White;
+
+				return ColorTranslator.FromHtml(string.Format("#{0}", fill.Value));
+			}
+
+			set
+			{
+				// Get the tcPr (table cell properties) element for this Cell,
+				// null will be return if no such element exists.
+				XElement tcPr = Xml.Element(XName.Get("tcPr", DocX.w.NamespaceName));
+				if (tcPr == null)
+				{
+					Xml.SetElementValue(XName.Get("tcPr", DocX.w.NamespaceName), string.Empty);
+					tcPr = Xml.Element(XName.Get("tcPr", DocX.w.NamespaceName));
+				}
+
+				/*
+				 * Get the shd (table shade) element for this Cell,
+				 * null will be return if no such element exists.
+				 */
+				XElement shd = tcPr.Element(XName.Get("shd", DocX.w.NamespaceName));
+				if (shd == null)
+				{
+					tcPr.SetElementValue(XName.Get("shd", DocX.w.NamespaceName), string.Empty);
+					shd = tcPr.Element(XName.Get("shd", DocX.w.NamespaceName));
+				}
+
+				// The val attribute needs to be set to clear
+				shd.SetAttributeValue(XName.Get("val", DocX.w.NamespaceName), "clear");
+
+				// The color attribute needs to be set to auto
+				shd.SetAttributeValue(XName.Get("color", DocX.w.NamespaceName), "auto");
+
+				// The fill attribute needs to be set to the hex for this Color.
+				shd.SetAttributeValue(XName.Get("fill", DocX.w.NamespaceName), value.ToHex());
+			}
+		}
+
+		/// <summary>
+		/// Width in pixels. // Added by Joel, refactored by Cathal
+		/// </summary>
+		public double Width
+		{
+			get
+			{
+				// Get the tcPr (table cell properties) element for this Cell,
+				// null will be return if no such element exists.
+				XElement tcPr = Xml.Element(XName.Get("tcPr", DocX.w.NamespaceName));
+
+				// If tcPr is null, this cell contains no width information.
+				// Get the tcW (table cell width) element for this Cell,
+				// null will be return if no such element exists.
+				XElement tcW = tcPr?.Element(XName.Get("tcW", DocX.w.NamespaceName));
+
+				// If tcW is null, this cell contains no width information.
+				// Get the w attribute of the tcW element.
+				XAttribute w = tcW?.Attribute(XName.Get("w", DocX.w.NamespaceName));
+
+				// If w is null, this cell contains no width information.
+				if (w == null)
+					return double.NaN;
+
+				// If w is not a double, something is wrong with this attributes value, so remove it and return double.NaN;
+				double widthInWordUnits;
+				if (!double.TryParse(w.Value, out widthInWordUnits))
+				{
+					w.Remove();
+					return double.NaN;
+				}
+
+				// 15 "word units" is equal to one pixel.
+				return (widthInWordUnits / 15);
+			}
+
+			set
+			{
+				/*
+				 * Get the tcPr (table cell properties) element for this Cell,
+				 * null will be return if no such element exists.
+				 */
+				XElement tcPr = Xml.Element(XName.Get("tcPr", DocX.w.NamespaceName));
+				if (tcPr == null)
+				{
+					Xml.SetElementValue(XName.Get("tcPr", DocX.w.NamespaceName), string.Empty);
+					tcPr = Xml.Element(XName.Get("tcPr", DocX.w.NamespaceName));
+				}
+
+				/*
+				 * Get the tcW (table cell width) element for this Cell,
+				 * null will be return if no such element exists.
+				 */
+				XElement tcW = tcPr.Element(XName.Get("tcW", DocX.w.NamespaceName));
+				if (tcW == null)
+				{
+					tcPr.SetElementValue(XName.Get("tcW", DocX.w.NamespaceName), string.Empty);
+					tcW = tcPr.Element(XName.Get("tcW", DocX.w.NamespaceName));
+				}
+
+				if (value == -1)
+				{
+					// remove cell width; due to set on table prop.
+					tcW.Remove();
+					return;
+				}
+
+				// The type attribute needs to be set to dxa which represents "twips" or twentieths of a point. In other words, 1/1440th of an inch.
+				tcW.SetAttributeValue(XName.Get("type", DocX.w.NamespaceName), "dxa");
+
+				// 15 "word units" is equal to one pixel. 
+				tcW.SetAttributeValue(XName.Get("w", DocX.w.NamespaceName), (value * 15).ToString(CultureInfo.InvariantCulture));
+			}
+		}
+
+		/// <summary>
+		/// LeftMargin in pixels. // Added by lckuiper
+		/// </summary>
+		/// <example>
+		/// <code>
+		/// // Create a new document.
+		///using (DocX document = DocX.Create("Test.docx"))
+		///{
+		///    // Insert table into this document.
+		///    Table t = document.InsertTable(3, 3);
+		///    t.Design = TableDesign.TableGrid;
+		///
+		///    // Get the center cell.
+		///    Cell center = t.Rows[1].Cells[1];
+		///
+		///    // Insert some text so that we can see the effect of the Margins.
+		///    center.Paragraphs[0].Append("Center Cell");
+		///
+		///    // Set the center cells Left, Margin to 10.
+		///    center.MarginLeft = 25;
+		///
+		///    // Save the document.
+		///    document.Save();
+		///}
+		/// </code>
+		/// </example>
+		public double MarginLeft
+		{
+			get
+			{
+				/*
+				 * Get the tcPr (table cell properties) element for this Cell,
+				 * null will be return if no such element exists.
+				 */
+				XElement tcPr = Xml.Element(XName.Get("tcPr", DocX.w.NamespaceName));
+
+				// If tcPr is null, this cell contains no width information.
+				if (tcPr == null)
+					return double.NaN;
+
+				/*
+				 * Get the tcMar
+				 * 
+				 */
+				XElement tcMar = tcPr.Element(XName.Get("tcMar", DocX.w.NamespaceName));
+
+				// If tcMar is null, this cell contains no margin information.
+				// Get the left (LeftMargin) element
+				XElement tcMarLeft = tcMar?.Element(XName.Get("left", DocX.w.NamespaceName));
+
+				// If tcMarLeft is null, this cell contains no left margin information.
+				// Get the w attribute of the tcMarLeft element.
+				XAttribute w = tcMarLeft?.Attribute(XName.Get("w", DocX.w.NamespaceName));
+
+				// If w is null, this cell contains no width information.
+				if (w == null)
+					return double.NaN;
+
+				// If w is not a double, something is wrong with this attributes value, so remove it and return double.NaN;
+				double leftMarginInWordUnits;
+				if (!double.TryParse(w.Value, out leftMarginInWordUnits))
+				{
+					w.Remove();
+					return double.NaN;
+				}
+
+				// 15 "word units" is equal to one pixel.
+				return (leftMarginInWordUnits / 15);
+			}
+
+			set
+			{
+				/*
+				 * Get the tcPr (table cell properties) element for this Cell,
+				 * null will be return if no such element exists.
+				 */
+				XElement tcPr = Xml.Element(XName.Get("tcPr", DocX.w.NamespaceName));
+				if (tcPr == null)
+				{
+					Xml.SetElementValue(XName.Get("tcPr", DocX.w.NamespaceName), string.Empty);
+					tcPr = Xml.Element(XName.Get("tcPr", DocX.w.NamespaceName));
+				}
+
+				/*
+				 * Get the tcMar (table cell margin) element for this Cell,
+				 * null will be return if no such element exists.
+				 */
+				XElement tcMar = tcPr.Element(XName.Get("tcMar", DocX.w.NamespaceName));
+				if (tcMar == null)
+				{
+					tcPr.SetElementValue(XName.Get("tcMar", DocX.w.NamespaceName), string.Empty);
+					tcMar = tcPr.Element(XName.Get("tcMar", DocX.w.NamespaceName));
+				}
+
+				/*
+				 * Get the left (table cell left margin) element for this Cell,
+				 * null will be return if no such element exists.
+				 */
+				XElement tcMarLeft = tcMar.Element(XName.Get("left", DocX.w.NamespaceName));
+				if (tcMarLeft == null)
+				{
+					tcMar.SetElementValue(XName.Get("left", DocX.w.NamespaceName), string.Empty);
+					tcMarLeft = tcMar.Element(XName.Get("left", DocX.w.NamespaceName));
+				}
+
+				// The type attribute needs to be set to dxa which represents "twips" or twentieths of a point. In other words, 1/1440th of an inch.
+				tcMarLeft.SetAttributeValue(XName.Get("type", DocX.w.NamespaceName), "dxa");
+
+				// 15 "word units" is equal to one pixel. 
+				tcMarLeft.SetAttributeValue(XName.Get("w", DocX.w.NamespaceName), (value * 15).ToString(CultureInfo.InvariantCulture));
+			}
+		}
+
+		/// <summary>
+		/// RightMargin in pixels. // Added by lckuiper
+		/// </summary>
+		/// <example>
+		/// <code>
+		/// // Create a new document.
+		///using (DocX document = DocX.Create("Test.docx"))
+		///{
+		///    // Insert table into this document.
+		///    Table t = document.InsertTable(3, 3);
+		///    t.Design = TableDesign.TableGrid;
+		///
+		///    // Get the center cell.
+		///    Cell center = t.Rows[1].Cells[1];
+		///
+		///    // Insert some text so that we can see the effect of the Margins.
+		///    center.Paragraphs[0].Append("Center Cell");
+		///
+		///    // Set the center cells Right, Margin to 10.
+		///    center.MarginRight = 25;
+		///
+		///    // Save the document.
+		///    document.Save();
+		///}
+		/// </code>
+		/// </example>
+		public double MarginRight
+		{
+			get
+			{
+				/*
+				 * Get the tcPr (table cell properties) element for this Cell,
+				 * null will be return if no such element exists.
+				 */
+				XElement tcPr = Xml.Element(XName.Get("tcPr", DocX.w.NamespaceName));
+
+				// If tcPr is null, this cell contains no width information.
+				if (tcPr == null)
+					return double.NaN;
+
+				/*
+				 * Get the tcMar
+				 * 
+				 */
+				XElement tcMar = tcPr.Element(XName.Get("tcMar", DocX.w.NamespaceName));
+
+				// If tcMar is null, this cell contains no margin information.
+				// Get the right (RightMargin) element
+				XElement tcMarRight = tcMar?.Element(XName.Get("right", DocX.w.NamespaceName));
+
+				// If tcMarRight is null, this cell contains no right margin information.
+				// Get the w attribute of the tcMarRight element.
+				XAttribute w = tcMarRight?.Attribute(XName.Get("w", DocX.w.NamespaceName));
+
+				// If w is null, this cell contains no width information.
+				if (w == null)
+					return double.NaN;
+
+				// If w is not a double, something is wrong with this attributes value, so remove it and return double.NaN;
+				double rightMarginInWordUnits;
+				if (!double.TryParse(w.Value, out rightMarginInWordUnits))
+				{
+					w.Remove();
+					return double.NaN;
+				}
+
+				// 15 "word units" is equal to one pixel.
+				return (rightMarginInWordUnits / 15);
+			}
+
+			set
+			{
+				/*
+				 * Get the tcPr (table cell properties) element for this Cell,
+				 * null will be return if no such element exists.
+				 */
+				XElement tcPr = Xml.Element(XName.Get("tcPr", DocX.w.NamespaceName));
+				if (tcPr == null)
+				{
+					Xml.SetElementValue(XName.Get("tcPr", DocX.w.NamespaceName), string.Empty);
+					tcPr = Xml.Element(XName.Get("tcPr", DocX.w.NamespaceName));
+				}
+
+				/*
+				 * Get the tcMar (table cell margin) element for this Cell,
+				 * null will be return if no such element exists.
+				 */
+				XElement tcMar = tcPr.Element(XName.Get("tcMar", DocX.w.NamespaceName));
+				if (tcMar == null)
+				{
+					tcPr.SetElementValue(XName.Get("tcMar", DocX.w.NamespaceName), string.Empty);
+					tcMar = tcPr.Element(XName.Get("tcMar", DocX.w.NamespaceName));
+				}
+
+				/*
+				 * Get the right (table cell right margin) element for this Cell,
+				 * null will be return if no such element exists.
+				 */
+				XElement tcMarRight = tcMar.Element(XName.Get("right", DocX.w.NamespaceName));
+				if (tcMarRight == null)
+				{
+					tcMar.SetElementValue(XName.Get("right", DocX.w.NamespaceName), string.Empty);
+					tcMarRight = tcMar.Element(XName.Get("right", DocX.w.NamespaceName));
+				}
+
+				// The type attribute needs to be set to dxa which represents "twips" or twentieths of a point. In other words, 1/1440th of an inch.
+				tcMarRight.SetAttributeValue(XName.Get("type", DocX.w.NamespaceName), "dxa");
+
+				// 15 "word units" is equal to one pixel. 
+				tcMarRight.SetAttributeValue(XName.Get("w", DocX.w.NamespaceName), (value * 15).ToString(CultureInfo.InvariantCulture));
+			}
+		}
+
+		/// <summary>
+		/// TopMargin in pixels. // Added by lckuiper
+		/// </summary>
+		/// <example>
+		/// <code>
+		/// // Create a new document.
+		///using (DocX document = DocX.Create("Test.docx"))
+		///{
+		///    // Insert table into this document.
+		///    Table t = document.InsertTable(3, 3);
+		///    t.Design = TableDesign.TableGrid;
+		///
+		///    // Get the center cell.
+		///    Cell center = t.Rows[1].Cells[1];
+		///
+		///    // Insert some text so that we can see the effect of the Margins.
+		///    center.Paragraphs[0].Append("Center Cell");
+		///
+		///    // Set the center cells Top, Margin to 10.
+		///    center.MarginTop = 25;
+		///
+		///    // Save the document.
+		///    document.Save();
+		///}
+		/// </code>
+		/// </example>
+		public double MarginTop
+		{
+			get
+			{
+				/*
+				 * Get the tcPr (table cell properties) element for this Cell,
+				 * null will be return if no such element exists.
+				 */
+				XElement tcPr = Xml.Element(XName.Get("tcPr", DocX.w.NamespaceName));
+
+				// If tcPr is null, this cell contains no width information.
+				if (tcPr == null)
+					return double.NaN;
+
+				/*
+				 * Get the tcMar
+				 * 
+				 */
+				XElement tcMar = tcPr.Element(XName.Get("tcMar", DocX.w.NamespaceName));
+
+				// If tcMar is null, this cell contains no margin information.
+				// Get the top (TopMargin) element
+				XElement tcMarTop = tcMar?.Element(XName.Get("top", DocX.w.NamespaceName));
+
+				// If tcMarTop is null, this cell contains no top margin information.
+				// Get the w attribute of the tcMarTop element.
+				XAttribute w = tcMarTop?.Attribute(XName.Get("w", DocX.w.NamespaceName));
+
+				// If w is null, this cell contains no width information.
+				if (w == null)
+					return double.NaN;
+
+				// If w is not a double, something is wrong with this attributes value, so remove it and return double.NaN;
+				double topMarginInWordUnits;
+				if (!double.TryParse(w.Value, out topMarginInWordUnits))
+				{
+					w.Remove();
+					return double.NaN;
+				}
+
+				// 15 "word units" is equal to one pixel.
+				return (topMarginInWordUnits / 15);
+			}
+
+			set
+			{
+				/*
+				 * Get the tcPr (table cell properties) element for this Cell,
+				 * null will be return if no such element exists.
+				 */
+				XElement tcPr = Xml.Element(XName.Get("tcPr", DocX.w.NamespaceName));
+				if (tcPr == null)
+				{
+					Xml.SetElementValue(XName.Get("tcPr", DocX.w.NamespaceName), string.Empty);
+					tcPr = Xml.Element(XName.Get("tcPr", DocX.w.NamespaceName));
+				}
+
+				/*
+				 * Get the tcMar (table cell margin) element for this Cell,
+				 * null will be return if no such element exists.
+				 */
+				XElement tcMar = tcPr.Element(XName.Get("tcMar", DocX.w.NamespaceName));
+				if (tcMar == null)
+				{
+					tcPr.SetElementValue(XName.Get("tcMar", DocX.w.NamespaceName), string.Empty);
+					tcMar = tcPr.Element(XName.Get("tcMar", DocX.w.NamespaceName));
+				}
+
+				/*
+				 * Get the top (table cell top margin) element for this Cell,
+				 * null will be return if no such element exists.
+				 */
+				XElement tcMarTop = tcMar.Element(XName.Get("top", DocX.w.NamespaceName));
+				if (tcMarTop == null)
+				{
+					tcMar.SetElementValue(XName.Get("top", DocX.w.NamespaceName), string.Empty);
+					tcMarTop = tcMar.Element(XName.Get("top", DocX.w.NamespaceName));
+				}
+
+				// The type attribute needs to be set to dxa which represents "twips" or twentieths of a point. In other words, 1/1440th of an inch.
+				tcMarTop.SetAttributeValue(XName.Get("type", DocX.w.NamespaceName), "dxa");
+
+				// 15 "word units" is equal to one pixel. 
+				tcMarTop.SetAttributeValue(XName.Get("w", DocX.w.NamespaceName), (value * 15).ToString(CultureInfo.InvariantCulture));
+			}
+		}
+
+		/// <summary>
+		/// BottomMargin in pixels. // Added by lckuiper
+		/// </summary>
+		/// <example>
+		/// <code>
+		/// // Create a new document.
+		///using (DocX document = DocX.Create("Test.docx"))
+		///{
+		///    // Insert table into this document.
+		///    Table t = document.InsertTable(3, 3);
+		///    t.Design = TableDesign.TableGrid;
+		///
+		///    // Get the center cell.
+		///    Cell center = t.Rows[1].Cells[1];
+		///
+		///    // Insert some text so that we can see the effect of the Margins.
+		///    center.Paragraphs[0].Append("Center Cell");
+		///
+		///    // Set the center cells Top, Margin to 10.
+		///    center.MarginBottom = 25;
+		///
+		///    // Save the document.
+		///    document.Save();
+		///}
+		/// </code>
+		/// </example>
+		public double MarginBottom
+		{
+			get
+			{
+				/*
+				 * Get the tcPr (table cell properties) element for this Cell,
+				 * null will be return if no such element exists.
+				 */
+				XElement tcPr = Xml.Element(XName.Get("tcPr", DocX.w.NamespaceName));
+
+				// If tcPr is null, this cell contains no width information.
+
+				/*
+				 * Get the tcMar
+				 * 
+				 */
+				XElement tcMar = tcPr?.Element(XName.Get("tcMar", DocX.w.NamespaceName));
+
+				// If tcMar is null, this cell contains no margin information.
+				if (tcMar == null)
+					return double.NaN;
+
+				// Get the bottom (BottomMargin) element
+				XElement tcMarBottom = tcMar.Element(XName.Get("bottom", DocX.w.NamespaceName));
+
+				// If tcMarBottom is null, this cell contains no bottom margin information.
+
+				// Get the w attribute of the tcMarBottom element.
+				XAttribute w = tcMarBottom?.Attribute(XName.Get("w", DocX.w.NamespaceName));
+
+				// If w is null, this cell contains no width information.
+				if (w == null)
+					return double.NaN;
+
+				// If w is not a double, something is wrong with this attributes value, so remove it and return double.NaN;
+				double bottomMarginInWordUnits;
+				if (!double.TryParse(w.Value, out bottomMarginInWordUnits))
+				{
+					w.Remove();
+					return double.NaN;
+				}
+
+				// 15 "word units" is equal to one pixel.
+				return (bottomMarginInWordUnits / 15);
+			}
+
+			set
+			{
+				/*
+				 * Get the tcPr (table cell properties) element for this Cell,
+				 * null will be return if no such element exists.
+				 */
+				XElement tcPr = Xml.Element(XName.Get("tcPr", DocX.w.NamespaceName));
+				if (tcPr == null)
+				{
+					Xml.SetElementValue(XName.Get("tcPr", DocX.w.NamespaceName), string.Empty);
+					tcPr = Xml.Element(XName.Get("tcPr", DocX.w.NamespaceName));
+				}
+
+				/*
+				 * Get the tcMar (table cell margin) element for this Cell,
+				 * null will be return if no such element exists.
+				 */
+				XElement tcMar = tcPr.Element(XName.Get("tcMar", DocX.w.NamespaceName));
+				if (tcMar == null)
+				{
+					tcPr.SetElementValue(XName.Get("tcMar", DocX.w.NamespaceName), string.Empty);
+					tcMar = tcPr.Element(XName.Get("tcMar", DocX.w.NamespaceName));
+				}
+
+				/*
+				 * Get the bottom (table cell bottom margin) element for this Cell,
+				 * null will be return if no such element exists.
+				 */
+				XElement tcMarBottom = tcMar.Element(XName.Get("bottom", DocX.w.NamespaceName));
+				if (tcMarBottom == null)
+				{
+					tcMar.SetElementValue(XName.Get("bottom", DocX.w.NamespaceName), string.Empty);
+					tcMarBottom = tcMar.Element(XName.Get("bottom", DocX.w.NamespaceName));
+				}
+
+				// The type attribute needs to be set to dxa which represents "twips" or twentieths of a point. In other words, 1/1440th of an inch.
+				tcMarBottom.SetAttributeValue(XName.Get("type", DocX.w.NamespaceName), "dxa");
+
+				// 15 "word units" is equal to one pixel. 
+				tcMarBottom.SetAttributeValue(XName.Get("w", DocX.w.NamespaceName), (value * 15).ToString(CultureInfo.InvariantCulture));
+			}
+		}
+
+		/// <summary>
+		/// Set the table cell border
+		/// Added by lckuiper @ 20101117
+		/// </summary>
+		/// <example>
+		/// <code>
+		/// // Create a new document.
+		///using (DocX document = DocX.Create("Test.docx"))
+		///{
+		///    // Insert a table into this document.
+		///    Table t = document.InsertTable(3, 3);
+		///
+		///    // Get the center cell.
+		///    Cell center = t.Rows[1].Cells[1];
+		///
+		///    // Create a large blue border.
+		///    Border b = new Border(BorderStyle.Tcbs_single, BorderSize.seven, 0, Color.Blue);
+		///
+		///    // Set the center cells Top, Bottom, Left and Right Borders to b.
+		///    center.SetBorder(TableCellBorderType.Top, b);
+		///    center.SetBorder(TableCellBorderType.Bottom, b);
+		///    center.SetBorder(TableCellBorderType.Left, b);
+		///    center.SetBorder(TableCellBorderType.Right, b);
+		///
+		///    // Save the document.
+		///    document.Save();
+		///}
+		/// </code>
+		/// </example>
+		/// <param name="borderType">Table Cell border to set</param>
+		/// <param name="border">Border object to set the table cell border</param>
+		public void SetBorder(TableCellBorderType borderType, Border border)
+		{
+			/*
+			 * Get the tcPr (table cell properties) element for this Cell,
+			 * null will be return if no such element exists.
+			 */
+			XElement tcPr = Xml.Element(XName.Get("tcPr", DocX.w.NamespaceName));
+			if (tcPr == null)
+			{
+				Xml.SetElementValue(XName.Get("tcPr", DocX.w.NamespaceName), string.Empty);
+				tcPr = Xml.Element(XName.Get("tcPr", DocX.w.NamespaceName));
+			}
+
+			/*
+			 * Get the tblBorders (table cell borders) element for this Cell,
+			 * null will be return if no such element exists.
+			 */
+			XElement tcBorders = tcPr.Element(XName.Get("tcBorders", DocX.w.NamespaceName));
+			if (tcBorders == null)
+			{
+				tcPr.SetElementValue(XName.Get("tcBorders", DocX.w.NamespaceName), string.Empty);
+				tcBorders = tcPr.Element(XName.Get("tcBorders", DocX.w.NamespaceName));
+			}
+
+			/*
+			 * Get the 'borderType' (table cell border) element for this Cell,
+			 * null will be return if no such element exists.
+			 */
+			string tcbordertype;
+			switch (borderType)
+			{
+				case TableCellBorderType.TopLeftToBottomRight:
+					tcbordertype = "tl2br";
+					break;
+				case TableCellBorderType.TopRightToBottomLeft:
+					tcbordertype = "tr2bl";
+					break;
+				default:
+					// enum to string
+					tcbordertype = borderType.ToString();
+					// only lower the first char of string (because of insideH and insideV)
+					tcbordertype = tcbordertype.Substring(0, 1).ToLower() + tcbordertype.Substring(1);
+					break;
+			}
+
+			XElement tcBorderType = tcBorders.Element(XName.Get(borderType.ToString(), DocX.w.NamespaceName));
+			if (tcBorderType == null)
+			{
+				tcBorders.SetElementValue(XName.Get(tcbordertype, DocX.w.NamespaceName), string.Empty);
+				tcBorderType = tcBorders.Element(XName.Get(tcbordertype, DocX.w.NamespaceName));
+			}
+
+			// get string value of border style
+			string borderstyle = border.Tcbs.ToString().Substring(5);
+			borderstyle = borderstyle.Substring(0, 1).ToLower() + borderstyle.Substring(1);
+
+			// The val attribute is used for the border style
+			tcBorderType.SetAttributeValue(XName.Get("val", DocX.w.NamespaceName), borderstyle);
+
+			int size;
+			switch (border.Size)
+			{
+				case BorderSize.one: size = 2; break;
+				case BorderSize.two: size = 4; break;
+				case BorderSize.three: size = 6; break;
+				case BorderSize.four: size = 8; break;
+				case BorderSize.five: size = 12; break;
+				case BorderSize.six: size = 18; break;
+				case BorderSize.seven: size = 24; break;
+				case BorderSize.eight: size = 36; break;
+				case BorderSize.nine: size = 48; break;
+				default: size = 2; break;
+			}
+
+			// The sz attribute is used for the border size
+			tcBorderType.SetAttributeValue(XName.Get("sz", DocX.w.NamespaceName), (size).ToString());
+
+			// The space attribute is used for the cell spacing (probably '0')
+			tcBorderType.SetAttributeValue(XName.Get("space", DocX.w.NamespaceName), (border.Space).ToString());
+
+			// The color attribute is used for the border color
+			tcBorderType.SetAttributeValue(XName.Get("color", DocX.w.NamespaceName), border.Color.ToHex());
+		}
+
+
+		/// <summary>
+		/// Get a table cell border
+		/// Added by lckuiper @ 20101117
+		/// </summary>
+		/// <param name="borderType">The table cell border to get</param>
+		public Border GetBorder(TableCellBorderType borderType)
+		{
+			// instance with default border values
+			var b = new Border();
+
+			/*
+			 * Get the tcPr (table cell properties) element for this Cell,
+			 * null will be return if no such element exists.
+			 */
+			XElement tcPr = Xml.Element(XName.Get("tcPr", DocX.w.NamespaceName));
+			if (tcPr == null)
+			{
+				// uses default border style
+			}
+
+			/*
+			 * Get the tcBorders (table cell borders) element for this Cell,
+			 * null will be return if no such element exists.
+			 */
+			XElement tcBorders = tcPr.Element(XName.Get("tcBorders", DocX.w.NamespaceName));
+			if (tcBorders == null)
+			{
+				// uses default border style
+			}
+
+			/*
+			 * Get the 'borderType' (cell border) element for this Cell,
+			 * null will be return if no such element exists.
+			 */
+			var tcbordertype = borderType.ToString();
+
+			switch (tcbordertype)
+			{
+				case "TopLeftToBottomRight":
+					tcbordertype = "tl2br";
+					break;
+				case "TopRightToBottomLeft":
+					tcbordertype = "tr2bl";
+					break;
+				default:
+					// only lower the first char of string (because of insideH and insideV)
+					tcbordertype = tcbordertype.Substring(0, 1).ToLower() + tcbordertype.Substring(1);
+					break;
+			}
+
+			XElement tcBorderType = tcBorders.Element(XName.Get(tcbordertype, DocX.w.NamespaceName));
+			if (tcBorderType == null)
+			{
+				// uses default border style
+			}
+
+			// The val attribute is used for the border style
+			XAttribute val = tcBorderType.Attribute(XName.Get("val", DocX.w.NamespaceName));
+			// If val is null, this cell contains no border information.
+			if (val == null)
+			{
+				// uses default border style
+			}
+			else
+			{
+				try
+				{
+					string bordertype = "Tcbs_" + val.Value;
+					b.Tcbs = (BorderStyle)Enum.Parse(typeof(BorderStyle), bordertype);
+				}
+
+				catch
+				{
+					val.Remove();
+					// uses default border style
+				}
+			}
+
+			// The sz attribute is used for the border size
+			XAttribute sz = tcBorderType.Attribute(XName.Get("sz", DocX.w.NamespaceName));
+			// If sz is null, this border contains no size information.
+			if (sz == null)
+			{
+				// uses default border style
+			}
+			else
+			{
+				// If sz is not an int, something is wrong with this attributes value, so remove it
+				int numerical_size;
+				if (!int.TryParse(sz.Value, out numerical_size))
+					sz.Remove();
+				else
+				{
+					switch (numerical_size)
+					{
+						case 2: b.Size = BorderSize.one; break;
+						case 4: b.Size = BorderSize.two; break;
+						case 6: b.Size = BorderSize.three; break;
+						case 8: b.Size = BorderSize.four; break;
+						case 12: b.Size = BorderSize.five; break;
+						case 18: b.Size = BorderSize.six; break;
+						case 24: b.Size = BorderSize.seven; break;
+						case 36: b.Size = BorderSize.eight; break;
+						case 48: b.Size = BorderSize.nine; break;
+						default: b.Size = BorderSize.one; break;
+					}
+				}
+			}
+
+			// The space attribute is used for the border spacing (probably '0')
+			XAttribute space = tcBorderType.Attribute(XName.Get("space", DocX.w.NamespaceName));
+			// If space is null, this border contains no space information.
+			if (space == null)
+			{
+				// uses default border style
+			}
+			else
+			{
+				// If space is not an int, something is wrong with this attributes value, so remove it
+				int borderspace;
+				if (!int.TryParse(space.Value, out borderspace))
+				{
+					space.Remove();
+					// uses default border style
+				}
+				else
+				{
+					b.Space = borderspace;
+				}
+			}
+
+			// The color attribute is used for the border color
+			XAttribute color = tcBorderType.Attribute(XName.Get("color", DocX.w.NamespaceName));
+			if (color == null)
+			{
+				// uses default border style
+			}
+			else
+			{
+				// If color is not a Color, something is wrong with this attributes value, so remove it
+				try
+				{
+					b.Color = ColorTranslator.FromHtml(string.Format("#{0}", color.Value));
+				}
+				catch
+				{
+					color.Remove();
+					// uses default border style
+				}
+			}
+			return b;
+		}
+
+		/// <summary>
+		/// Gets or Sets the fill color of this Cell.
+		/// </summary>
+		/// <example>
+		/// <code>
+		/// // Create a new document.
+		/// using (DocX document = DocX.Create("Test.docx"))
+		/// {
+		///    // Insert a table into this document.
+		///    Table t = document.InsertTable(3, 3);
+		///
+		///    // Fill the first cell as Blue.
+		///    t.Rows[0].Cells[0].FillColor = Color.Blue;
+		///    // Fill the middle cell as Red.
+		///    t.Rows[1].Cells[1].FillColor = Color.Red;
+		///    // Fill the last cell as Green.
+		///    t.Rows[2].Cells[2].FillColor = Color.Green;
+		///
+		///    // Save the document.
+		///    document.Save();
+		/// }
+		/// </code>
+		/// </example>
+		public Color FillColor
+		{
+			get
+			{
+				/*
+				 * Get the tcPr (table cell properties) element for this Cell,
+				 * null will be return if no such element exists.
+				 */
+				XElement tcPr = Xml.Element(XName.Get("tcPr", DocX.w.NamespaceName));
+				XElement shd = tcPr?.Element(XName.Get("shd", DocX.w.NamespaceName));
+				XAttribute fill = shd?.Attribute(XName.Get("fill", DocX.w.NamespaceName));
+				if (fill == null)
+					return Color.Empty;
+				int argb = Int32.Parse(fill.Value.Replace("#", ""), NumberStyles.HexNumber);
+				return Color.FromArgb(argb);
+			}
+
+			set
+			{
+				/*
+				 * Get the tcPr (table cell properties) element for this Cell,
+				 * null will be return if no such element exists.
+				 */
+				XElement tcPr = Xml.Element(XName.Get("tcPr", DocX.w.NamespaceName));
+				if (tcPr == null)
+				{
+					Xml.SetElementValue(XName.Get("tcPr", DocX.w.NamespaceName), string.Empty);
+					tcPr = Xml.Element(XName.Get("tcPr", DocX.w.NamespaceName));
+				}
+
+				/*
+				 * Get the tcW (table cell width) element for this Cell,
+				 * null will be return if no such element exists.
+				 */
+				XElement shd = tcPr.Element(XName.Get("shd", DocX.w.NamespaceName));
+				if (shd == null)
+				{
+					tcPr.SetElementValue(XName.Get("shd", DocX.w.NamespaceName), string.Empty);
+					shd = tcPr.Element(XName.Get("shd", DocX.w.NamespaceName));
+				}
+
+				shd.SetAttributeValue(XName.Get("val", DocX.w.NamespaceName), "clear");
+				shd.SetAttributeValue(XName.Get("color", DocX.w.NamespaceName), "auto");
+				shd.SetAttributeValue(XName.Get("fill", DocX.w.NamespaceName), value.ToHex());
+			}
+		}
+
+		public override Table InsertTable(int rowCount, int columnCount)
+		{
+			Table table = base.InsertTable(rowCount, columnCount);
+			table.mainPart = mainPart;
+			InsertParagraph(); //Dmitchern, It is necessary to put paragraph in the end of the cell, without it MS-Word will say that the document is corrupted
+							   //IMPORTANT: It will be better to check all methods that work with adding anything to cells
+			return table;
+		}
+
+		public TextDirection TextDirection
+		{
+			get
+			{
+				XElement tcPr = Xml.Element(XName.Get("tcPr", DocX.w.NamespaceName));
+
+				// If tcPr is null, this cell contains no width information.
+				XElement textDirection = tcPr?.Element(XName.Get("textDirection", DocX.w.NamespaceName));
+				XAttribute val = textDirection?.Attribute(XName.Get("val", DocX.w.NamespaceName));
+				if (val == null)
+					return TextDirection.right;
+
+				// If val is not a VerticalAlign enum, something is wrong with this attributes value, so remove it and return VerticalAlignment.Center;
+				try
+				{
+					return (TextDirection)Enum.Parse(typeof(TextDirection), val.Value, true);
+				}
+				catch
+				{
+					val.Remove();
+					return TextDirection.right;
+				}
+			}
+			set
+			{
+				/*
+					* Get the tcPr (table cell properties) element for this Cell,
+					* null will be return if no such element exists.
+					*/
+				XElement tcPr = Xml.Element(XName.Get("tcPr", DocX.w.NamespaceName));
+				if (tcPr == null)
+				{
+					Xml.SetElementValue(XName.Get("tcPr", DocX.w.NamespaceName), string.Empty);
+					tcPr = Xml.Element(XName.Get("tcPr", DocX.w.NamespaceName));
+				}
+
+				/*
+				 * Get the vAlign (table cell vertical alignment) element for this Cell,
+				 * null will be return if no such element exists.
+				 */
+				XElement textDirection = tcPr.Element(XName.Get("textDirection", DocX.w.NamespaceName));
+				if (textDirection == null)
+				{
+					tcPr.SetElementValue(XName.Get("textDirection", DocX.w.NamespaceName), string.Empty);
+					textDirection = tcPr.Element(XName.Get("textDirection", DocX.w.NamespaceName));
+				}
+
+				// Set the VerticalAlignment in 'val'
+				textDirection.SetAttributeValue(XName.Get("val", DocX.w.NamespaceName), value.ToString());
+
+			}
+		}
+	}
+
+
+	public class TableLook
+	{
+		public bool FirstRow { get; set; }
+		public bool LastRow { get; set; }
+		public bool FirstColumn { get; set; }
+		public bool LastColumn { get; set; }
+		public bool NoHorizontalBanding { get; set; }
+		public bool NoVerticalBanding { get; set; }
+	}
 }

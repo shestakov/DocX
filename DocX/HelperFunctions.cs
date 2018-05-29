@@ -8,6 +8,7 @@ using System.Linq;
 using System.Reflection;
 using System.Security.Principal;
 using System.Text;
+using System.Xml;
 using System.Xml.Linq;
 
 namespace Novacode
@@ -437,13 +438,14 @@ namespace Novacode
                 )
             );
 
-            /*XElement tableGrid = new XElement(XName.Get("tblGrid", DocX.w.NamespaceName));
-            for (int i = 0; i < columnWidths.Length; i++)
-                tableGrid.Add(new XElement(XName.Get("gridCol", DocX.w.NamespaceName), new XAttribute(XName.Get("w", DocX.w.NamespaceName), XmlConvert.ToString(columnWidths[i]))));
+			//Somehow creating the table grid was commented out
+			XElement tableGrid = new XElement(XName.Get("tblGrid", DocX.w.NamespaceName));
+			for (int i = 0; i < columnWidths.Length; i++)
+				tableGrid.Add(new XElement(XName.Get("gridCol", DocX.w.NamespaceName), new XAttribute(XName.Get("w", DocX.w.NamespaceName), XmlConvert.ToString(columnWidths[i]))));
 
-            newTable.Add(tableGrid);*/
+			newTable.Add(tableGrid);
 
-            for (int i = 0; i < rowCount; i++)
+			for (int i = 0; i < rowCount; i++)
             {
                 XElement row = new XElement(XName.Get("tr", DocX.w.NamespaceName));
 
