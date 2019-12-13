@@ -1,0 +1,40 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>netstandard2.0</TargetFramework>
+    <RootNamespace>Novacode</RootNamespace>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <None Remove="License\License.html" />
+    <None Remove="Resources\default_styles.xml.gz" />
+    <None Remove="Resources\numbering.default_bullet_abstract.xml.gz" />
+    <None Remove="Resources\numbering.default_decimal_abstract.xml.gz" />
+    <None Remove="Resources\numbering.xml.gz" />
+    <None Remove="Resources\styles.xml.gz" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Content Include="License\License.html" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <EmbeddedResource Include="Resources\default_styles.xml.gz" />
+    <EmbeddedResource Include="Resources\numbering.default_bullet_abstract.xml.gz" />
+    <EmbeddedResource Include="Resources\numbering.default_decimal_abstract.xml.gz" />
+    <EmbeddedResource Include="Resources\numbering.xml.gz" />
+    <EmbeddedResource Include="Resources\styles.xml.gz" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="System.Drawing.Common" Version="4.5.1" />
+    <PackageReference Include="System.IO.Packaging" Version="4.5.0" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Compile Update="_Extensions.cs">
+      <SubType>Code</SubType>
+    </Compile>
+  </ItemGroup>
+
+</Project>

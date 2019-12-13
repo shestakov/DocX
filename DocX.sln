@@ -1,7 +1,7 @@
 ﻿
 Microsoft Visual Studio Solution File, Format Version 12.00
-# Visual Studio 14
-VisualStudioVersion = 14.0.25420.1
+# Visual Studio 15
+VisualStudioVersion = 15.0.28010.2050
 MinimumVisualStudioVersion = 10.0.40219.1
 Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "Solution Items", "Solution Items", "{DF41F5CE-8BCB-40CC-835F-54A3DB7D802F}"
 EndProject
@@ -21,6 +21,8 @@ Project("{7CF6DF6D-3B04-46F8-A40B-537D21BCA0B4}") = "Documentation", "Documentat
 	ProjectSection(ProjectDependencies) = postProject
 		{E863D072-AA8B-4108-B5F1-785241B37F67} = {E863D072-AA8B-4108-B5F1-785241B37F67}
 	EndProjectSection
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Hardroller.DocX", "Hardroller.DocX\Hardroller.DocX.csproj", "{5D718968-5E16-4103-9CBB-2C31E37B9D21}"
 EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
@@ -43,9 +45,16 @@ Global
 		{1EB1EE8F-9978-425B-A742-533DCCEB4811}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
 		{1EB1EE8F-9978-425B-A742-533DCCEB4811}.Release|Any CPU.ActiveCfg = Release|Any CPU
 		{1EB1EE8F-9978-425B-A742-533DCCEB4811}.Release|Any CPU.Build.0 = Release|Any CPU
+		{5D718968-5E16-4103-9CBB-2C31E37B9D21}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{5D718968-5E16-4103-9CBB-2C31E37B9D21}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{5D718968-5E16-4103-9CBB-2C31E37B9D21}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{5D718968-5E16-4103-9CBB-2C31E37B9D21}.Release|Any CPU.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE
+	EndGlobalSection
+	GlobalSection(ExtensibilityGlobals) = postSolution
+		SolutionGuid = {78AFB359-038B-4288-B00E-0B34DEDA2AB4}
 	EndGlobalSection
 	GlobalSection(TestCaseManagementSettings) = postSolution
 		CategoryFile = DocX.vsmdi
